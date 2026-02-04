@@ -1,0 +1,150 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "name": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "expr": "rate(scheduler_command_publish_total[1m])",
+          "refId": "A"
+        }
+      ],
+      "title": "API: Command Publish Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "name": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "rate(scheduler_command_publish_failed_total[1m])",
+          "refId": "A"
+        }
+      ],
+      "title": "API: Command Publish Fail Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "name": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "rate(scheduler_master_command_kafka_consumed_total[1m])",
+          "refId": "A"
+        }
+      ],
+      "title": "Master: Kafka Commands Consumed",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "name": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "rate(scheduler_master_command_kafka_error_total[1m])",
+          "refId": "A"
+        }
+      ],
+      "title": "Master: Kafka Errors",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "name": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "id": 5,
+      "targets": [
+        {
+          "expr": "rate(scheduler_master_workflow_scheduled_total[1m])",
+          "refId": "A"
+        }
+      ],
+      "title": "Master: Workflows Scheduled",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "name": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "id": 6,
+      "targets": [
+        {
+          "expr": "rate(scheduler_master_trigger_processed_total[1m])",
+          "refId": "A"
+        }
+      ],
+      "title": "Master: Triggers Processed",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "name": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "id": 7,
+      "targets": [
+        {
+          "expr": "rate(scheduler_master_trigger_error_total[1m])",
+          "refId": "A"
+        }
+      ],
+      "title": "Master: Trigger Errors",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "name": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "id": 8,
+      "targets": [
+        {
+          "expr": "rate(scheduler_master_ready_published_total[1m])",
+          "refId": "A"
+        }
+      ],
+      "title": "Master: Ready Events Published",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["scheduler", "otel", "demo"],
+  "templating": { "list": [] },
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Scheduler Demo (Phase B+C)",
+  "version": 1
+}

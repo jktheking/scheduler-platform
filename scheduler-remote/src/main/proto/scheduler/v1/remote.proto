@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package scheduler.v1;
+
+option java_multiple_files = true;
+option java_package = "com.acme.scheduler.remote.v1";
+option java_outer_classname = "SchedulerRemoteProto";
+
+service MasterWorkerRpc {
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+message HeartbeatRequest {
+  string node_id = 1;
+  string role = 2; // master|worker|alert
+  int64 unix_millis = 3;
+}
+
+message HeartbeatResponse {
+  bool ok = 1;
+  string message = 2;
+}

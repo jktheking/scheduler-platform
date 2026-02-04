@@ -12,4 +12,6 @@ include(
  "scheduler-master",
  "scheduler-worker",
  "scheduler-alert-server",
-)
+ "scheduler-adapter-inmemory",
+ "scheduler-adapter-kafka",
+ "scheduler-adapter-jdbc")

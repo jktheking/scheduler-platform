@@ -1,0 +1,38 @@
+server:
+  port: 5678
+
+spring:
+  application:
+    name: scheduler-master
+  datasource:
+    url: jdbc:postgresql://localhost:5432/scheduler
+    username: scheduler
+    password: scheduler
+  flyway:
+    enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+scheduler:
+  master:
+    role: MASTER          # MASTER | WRITER
+    command-driver: KAFKA # KAFKA | DBPOLL
+    kafka:
+      bootstrapServers: localhost:9092
+      commandsTopic: scheduler.commands.v1
+      readyTopic: scheduler.tasks.ready.v1
+      masterGroupId: scheduler-master
+      writerGroupId: scheduler-command-writer
+      clientId: scheduler-master
+    trigger:
+      engine: TIMEWHEEL   # TIMEWHEEL | QUARTZ
+      drainBatch: 500
+      quartzPollMs: 200
+      wheelShards: 8
+      wheelTickMs: 100
+      wheelSlots: 512
+      wheelLookaheadMs: 30000

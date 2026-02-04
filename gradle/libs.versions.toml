@@ -6,6 +6,8 @@ springdoc = "3.0.1"
 grpc = "1.69.0"
 protobuf = "4.29.2"
 otel = "1.58.0"
+postgresql = "42.7.4"
+kafka = "3.7.1"
 
 [libraries]
 spring-boot-starter-web = { module = "org.springframework.boot:spring-boot-starter-web" }
@@ -24,8 +26,14 @@ otel-api = { module = "io.opentelemetry:opentelemetry-api", version.ref = "otel"
 otel-sdk = { module = "io.opentelemetry:opentelemetry-sdk", version.ref = "otel" }
 otel-sdk-trace = { module = "io.opentelemetry:opentelemetry-sdk-trace", version.ref = "otel" }
 otel-exporter-otlp = { module = "io.opentelemetry:opentelemetry-exporter-otlp", version.ref = "otel" }
+postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
+
+kafka-clients = { module = "org.apache.kafka:kafka-clients", version.ref = "kafka" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "springBoot" }
 spring-dep-mgmt = { id = "io.spring.dependency-management", version.ref = "springDependencyManagement" }
 protobuf = { id = "com.google.protobuf", version = "0.9.4" }
+
+[bundles]
+jdbc = ["postgresql"]

@@ -1,0 +1,154 @@
+name: scheduler-infra
+
+services:
+  postgres:
+    image: postgres:16.4
+    container_name: scheduler-postgres
+    environment:
+      POSTGRES_DB: scheduler
+      POSTGRES_USER: scheduler
+      POSTGRES_PASSWORD: scheduler
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scheduler -d scheduler"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks: [scheduler-net]
+
+  pgadmin:
+    image: dpage/pgadmin4:8.10
+    container_name: scheduler-pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@scheduler.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks: [scheduler-net]
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: scheduler-kafka
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+
+      # REQUIRED for KRaft. Keep stable as long as kafka_data volume exists.
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+
+      # Internal: kafka:29092, Host: localhost:9092
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server kafka:29092 --list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks: [scheduler-net]
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: scheduler-kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    ports:
+      - "8088:8080"
+    networks: [scheduler-net]
+
+  flyway:
+    image: flyway/flyway:10.16.0
+    container_name: scheduler-flyway
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - "-url=jdbc:postgresql://postgres:5432/scheduler"
+      - "-user=scheduler"
+      - "-password=scheduler"
+      - "-connectRetries=60"
+      - "migrate"
+    volumes:
+      - ../scheduler-dao/src/main/resources/db/migration:/flyway/sql:ro
+    networks: [scheduler-net]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.105.0
+    container_name: scheduler-otel-collector
+    command: ["--config=/etc/otelcol/config.yml"]
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "9464:9464"
+    volumes:
+      - ./demo/otel/otel-collector.yml:/etc/otelcol/config.yml:ro
+    networks: [scheduler-net]
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: scheduler-prometheus
+    depends_on:
+      - otel-collector
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./demo/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    networks: [scheduler-net]
+
+  grafana:
+    image: grafana/grafana:11.1.4
+    container_name: scheduler-grafana
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./demo/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./demo/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    networks: [scheduler-net]
+
+networks:
+  scheduler-net:
+    name: scheduler-net
+    driver: bridge
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+  kafka_data:
+  prometheus_data:
+  grafana_data:

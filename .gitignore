@@ -1,0 +1,88 @@
+############################################
+# Java
+############################################
+*.class
+*.log
+hs_err_pid*
+replay_pid*
+
+############################################
+# Gradle
+############################################
+.gradle/
+**/.gradle/
+build/
+**/build/
+
+# Gradle Wrapper (keep these!)
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+############################################
+# Spring Boot
+############################################
+logs/
+*.log
+application-local.yml
+application-local.yaml
+application-dev.yml
+application-dev.yaml
+application-test.yml
+application-test.yaml
+
+############################################
+# Eclipse / STS
+############################################
+.metadata/
+.recommenders/
+.settings/
+.classpath
+.project
+.factorypath
+
+############################################
+# Eclipse launch configs
+############################################
+*.launch
+
+############################################
+# IntelliJ (ignore if team uses mixed IDEs)
+############################################
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+############################################
+# VS Code (optional)
+############################################
+.vscode/
+
+############################################
+# OS files
+############################################
+.DS_Store
+Thumbs.db
+
+############################################
+# Logs & temp files
+############################################
+*.tmp
+*.swp
+*.bak
+*.pid
+
+############################################
+# Test & coverage
+############################################
+coverage/
+*.exec
+*.ec
+*.gcda
+*.gcno
+
+############################################
+# Docker
+############################################
+docker-data/

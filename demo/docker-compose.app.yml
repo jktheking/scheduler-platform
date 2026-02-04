@@ -1,0 +1,55 @@
+name: scheduler-app
+
+services:
+  scheduler-api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        APP_MODULE: scheduler-api
+        JAVA_VERSION: "25"
+    image: scheduler-api:demo
+    container_name: scheduler-api
+
+    # ❗ IMPORTANT:
+    # Do NOT use depends_on for services defined in infra compose.
+    # Compose validates depends_on against THIS file only.
+
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+
+      SCHEDULER_INGESTION_MODE: KAFKA
+      SCHEDULER_INGESTION_KAFKA_BOOTSTRAPSERVERS: kafka:29092
+      SCHEDULER_INGESTION_KAFKA_COMMANDSTOPIC: scheduler.commands.v1
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/scheduler
+      SPRING_DATASOURCE_USERNAME: scheduler
+      SPRING_DATASOURCE_PASSWORD: scheduler
+
+      SERVER_PORT: "8080"
+
+      # ---- OTel Java Agent ----
+      OTEL_SERVICE_NAME: scheduler-api
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: none
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=demo
+
+      JAVA_TOOL_OPTIONS: >
+        -javaagent:/otel/opentelemetry-javaagent.jar
+        -Dotel.javaagent.debug=false
+
+    volumes:
+      - ./otel/opentelemetry-javaagent.jar:/otel/opentelemetry-javaagent.jar:ro
+
+    ports:
+      - "8080:8080"
+
+    restart: unless-stopped
+    networks: [scheduler-net]
+
+networks:
+  scheduler-net:
+    external: true
+    name: scheduler-net

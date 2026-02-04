@@ -1,0 +1,42 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: scheduler-api
+
+# Choose ingestion mode:
+# - INMEMORY (default dev)
+# - JDBC     (low TPS, writes directly to Postgres)
+# - KAFKA    (high TPS, writes to Kafka as WAL)
+scheduler:
+  ingestion:
+    mode: INMEMORY
+    tenantDefault: default
+    admission:
+      refillTokensPerSecond: 50000
+      capacity: 100000
+      maxTenants: 10000
+      maxInFlight: 20000
+      kafkaRejectAbovePressure: 0.80
+      circuitBreaker:
+        failureThreshold: 10
+        openMillis: 10000
+        halfOpenMaxProbes: 5
+    kafka:
+      enabled: true
+      bootstrapServers: localhost:9092
+      commandsTopic: scheduler.commands.v1
+      clientId: scheduler-api
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
