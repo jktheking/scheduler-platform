@@ -1,34 +1,61 @@
 [versions]
 java = "25"
+
 springBoot = "4.0.2"
 springDependencyManagement = "1.1.7"
+springFramework = "6.2.2"
 springdoc = "3.0.1"
+
 grpc = "1.69.0"
 protobuf = "4.29.2"
+
 otel = "1.58.0"
+
 postgresql = "42.7.4"
 kafka = "3.7.1"
 
+jackson = "2.18.2"
+junit = "5.11.4"
+
 [libraries]
+# ---- Spring Boot ----
 spring-boot-starter-web = { module = "org.springframework.boot:spring-boot-starter-web" }
 spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
 spring-boot-starter-validation = { module = "org.springframework.boot:spring-boot-starter-validation" }
+spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
+
+spring-jdbc = { module = "org.springframework:spring-jdbc", version.ref = "springFramework" }
 
 springdoc-openapi-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
 
+# ---- Kafka ----
+kafka-clients = { module = "org.apache.kafka:kafka-clients", version.ref = "kafka" }
+
+# ---- Database ----
+postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
+
+# ---- Jackson ----
+jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
+
+# ---- gRPC / Protobuf ----
 grpc-netty = { module = "io.grpc:grpc-netty-shaded", version.ref = "grpc" }
 grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }
 grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
 
 protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
 
+javax-annotation-api = { module = "javax.annotation:javax.annotation-api", version = "1.3.2" }
+
+# ---- OpenTelemetry ----
 otel-api = { module = "io.opentelemetry:opentelemetry-api", version.ref = "otel" }
 otel-sdk = { module = "io.opentelemetry:opentelemetry-sdk", version.ref = "otel" }
 otel-sdk-trace = { module = "io.opentelemetry:opentelemetry-sdk-trace", version.ref = "otel" }
 otel-exporter-otlp = { module = "io.opentelemetry:opentelemetry-exporter-otlp", version.ref = "otel" }
-postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
 
-kafka-clients = { module = "org.apache.kafka:kafka-clients", version.ref = "kafka" }
+# ---- Testing ----
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "springBoot" }

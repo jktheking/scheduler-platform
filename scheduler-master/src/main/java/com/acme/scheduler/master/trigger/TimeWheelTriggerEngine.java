@@ -17,9 +17,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.acme.scheduler.master.adapter.jdbc.JdbcTriggerRepository;
-import com.acme.scheduler.master.kafka.KafkaReadyPublisher;
+import com.acme.scheduler.master.runtime.DagRuntime;
 import com.acme.scheduler.master.observability.MasterMetrics;
-import com.acme.scheduler.master.runtime.TaskReadyEvent;
 
 /**
  * Hashed-wheel-timer-inspired trigger engine.
@@ -36,7 +35,7 @@ public final class TimeWheelTriggerEngine implements TriggerEngine {
   private static final Logger log = LoggerFactory.getLogger(TimeWheelTriggerEngine.class);
 
   private final JdbcTriggerRepository repo;
-  private final KafkaReadyPublisher publisher;
+  private final DagRuntime dagRuntime;
   private final MasterMetrics metrics;
 
   private final int shards;
@@ -64,7 +63,7 @@ public final class TimeWheelTriggerEngine implements TriggerEngine {
   private final AtomicBoolean started = new AtomicBoolean(false);
 
   public TimeWheelTriggerEngine(JdbcTriggerRepository repo,
-                               KafkaReadyPublisher publisher,
+                               DagRuntime dagRuntime,
                                MasterMetrics metrics,
                                int shards,
                                long tickMs,
@@ -72,7 +71,7 @@ public final class TimeWheelTriggerEngine implements TriggerEngine {
                                long lookaheadMs,
                                int drainBatch) {
     this.repo = Objects.requireNonNull(repo);
-    this.publisher = Objects.requireNonNull(publisher);
+    this.dagRuntime = Objects.requireNonNull(dagRuntime);
     this.metrics = Objects.requireNonNull(metrics);
     this.shards = shards;
     this.tickMs = tickMs;
@@ -152,9 +151,14 @@ public final class TimeWheelTriggerEngine implements TriggerEngine {
       // For v1, we just publish events for already-claimed triggers via claimDue batch.
       List<JdbcTriggerRepository.TriggerRow> claimed = repo.claimDue(batch.size(), claimedBy);
       for (JdbcTriggerRepository.TriggerRow tr : claimed) {
-        publisher.publish(new TaskReadyEvent(tr.workflowInstanceId(), tr.triggerId(), tr.dueTime(), "{}"));
-        repo.markDone(tr.triggerId());
-        metrics.triggerProcessed.add(1);
+        try {
+          dagRuntime.onTriggerDue(tr.workflowInstanceId(), tr.triggerId(), tr.dueTime(), "{}");
+          repo.markDone(tr.triggerId());
+          metrics.triggerProcessed.add(1);
+        } catch (Exception e) {
+          repo.markFailed(tr.triggerId(), e.toString());
+          metrics.triggerError.add(1);
+        }
       }
     } catch (Exception e) {
       metrics.triggerError.add(1);

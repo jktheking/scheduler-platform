@@ -1,0 +1,26 @@
+server:
+  port: 6789
+
+spring:
+  application:
+    name: scheduler-worker
+  datasource:
+    url: jdbc:postgresql://localhost:5432/scheduler
+    username: scheduler
+    password: scheduler
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+scheduler:
+  worker:
+    workerId: ${WORKER_ID:worker-1}
+    kafka:
+      bootstrapServers: ${KAFKA_BOOTSTRAP:localhost:9092}
+      readyTopic: scheduler.tasks.ready.v1
+      taskStateTopic: scheduler.task.state.v1
+      groupId: scheduler-worker
+      clientId: scheduler-worker

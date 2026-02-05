@@ -49,6 +49,86 @@ services:
     restart: unless-stopped
     networks: [scheduler-net]
 
+  scheduler-master:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        APP_MODULE: scheduler-master
+        JAVA_VERSION: "25"
+    image: scheduler-master:demo
+    container_name: scheduler-master
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+
+      # master is Kafka-driven
+      SCHEDULER_MASTER_COMMAND_DRIVER: KAFKA
+      SCHEDULER_MASTER_KAFKA_BOOTSTRAPSERVERS: kafka:29092
+      SCHEDULER_MASTER_KAFKA_COMMANDSTOPIC: scheduler.commands.v1
+      SCHEDULER_MASTER_KAFKA_READYTOPIC: scheduler.tasks.ready.v1
+      SCHEDULER_MASTER_KAFKA_STATETOPIC: scheduler.task.state.v1
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/scheduler
+      SPRING_DATASOURCE_USERNAME: scheduler
+      SPRING_DATASOURCE_PASSWORD: scheduler
+
+      # ---- OTel Java Agent ----
+      OTEL_SERVICE_NAME: scheduler-master
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: none
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=demo
+
+      JAVA_TOOL_OPTIONS: >
+        -javaagent:/otel/opentelemetry-javaagent.jar
+        -Dotel.javaagent.debug=false
+
+    volumes:
+      - ./otel/opentelemetry-javaagent.jar:/otel/opentelemetry-javaagent.jar:ro
+
+    restart: unless-stopped
+    networks: [scheduler-net]
+
+  scheduler-worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        APP_MODULE: scheduler-worker
+        JAVA_VERSION: "25"
+    image: scheduler-worker:demo
+    container_name: scheduler-worker
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+
+      SCHEDULER_WORKER_ID: worker-1
+      SCHEDULER_WORKER_KAFKA_BOOTSTRAPSERVERS: kafka:29092
+      SCHEDULER_WORKER_KAFKA_READYTOPIC: scheduler.tasks.ready.v1
+      SCHEDULER_WORKER_KAFKA_STATETOPIC: scheduler.task.state.v1
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/scheduler
+      SPRING_DATASOURCE_USERNAME: scheduler
+      SPRING_DATASOURCE_PASSWORD: scheduler
+
+      # ---- OTel Java Agent ----
+      OTEL_SERVICE_NAME: scheduler-worker
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: none
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=demo
+
+      JAVA_TOOL_OPTIONS: >
+        -javaagent:/otel/opentelemetry-javaagent.jar
+        -Dotel.javaagent.debug=false
+
+    volumes:
+      - ./otel/opentelemetry-javaagent.jar:/otel/opentelemetry-javaagent.jar:ro
+
+    restart: unless-stopped
+    networks: [scheduler-net]
+
 networks:
   scheduler-net:
     external: true

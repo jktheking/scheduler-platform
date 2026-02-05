@@ -69,6 +69,23 @@ services:
       retries: 30
     networks: [scheduler-net]
 
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: scheduler-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash","-lc"]
+    command: >
+      "
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic scheduler.commands.v1 --partitions 6 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic scheduler.tasks.ready.v1 --partitions 12 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic scheduler.task.state.v1 --partitions 12 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic scheduler.alerts.v1 --partitions 6 --replication-factor 1 &&
+      echo 'kafka topics created'
+      "
+    networks: [scheduler-net]
+
   kafka-ui:
     image: provectuslabs/kafka-ui:v0.7.2
     container_name: scheduler-kafka-ui
@@ -108,7 +125,7 @@ services:
       - "4318:4318"
       - "9464:9464"
     volumes:
-      - ./demo/otel/otel-collector.yml:/etc/otelcol/config.yml:ro
+      - ./otel/otel-collector.yml:/etc/otelcol/config.yml:ro
     networks: [scheduler-net]
 
   prometheus:
@@ -121,7 +138,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./demo/prometheus:/etc/prometheus:ro
+      - ./prometheus:/etc/prometheus:ro
       - prometheus_data:/prometheus
     networks: [scheduler-net]
 
@@ -136,8 +153,8 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./demo/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./demo/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     networks: [scheduler-net]
 

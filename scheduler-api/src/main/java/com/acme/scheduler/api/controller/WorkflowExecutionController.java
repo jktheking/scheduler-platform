@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,6 +18,7 @@ import com.acme.scheduler.api.dto.execution.StartWorkflowInstanceRequest;
 import com.acme.scheduler.api.dto.execution.WorkflowInstanceDto;
 import com.acme.scheduler.service.workflow.StartWorkflowUseCase;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -42,13 +44,18 @@ public class WorkflowExecutionController {
   @PostMapping("/start-process-instance")
   public ApiResponse<WorkflowInstanceDto> start(
       @PathVariable long projectCode,
-      @Valid @RequestBody StartWorkflowInstanceRequest req
+      @Valid @RequestBody StartWorkflowInstanceRequest req,
+      @RequestHeader(value = "traceparent", required = false) String traceParent
   ) {
     String tenantId = String.valueOf(projectCode); // until tenant/project separation is added
 
     String payloadJson;
     try {
-      payloadJson = mapper.writeValueAsString(req);
+      ObjectNode node = mapper.valueToTree(req);
+      if (traceParent != null && !traceParent.isBlank()) {
+        node.put("traceParent", traceParent);
+      }
+      payloadJson = mapper.writeValueAsString(node);
     } catch (Exception e) {
       payloadJson = "{}";
     }

@@ -30,6 +30,8 @@ public class MasterKafkaProperties {
     private String bootstrapServers = "localhost:9092";
     private String commandsTopic = "scheduler.commands.v1";
     private String readyTopic = "scheduler.tasks.ready.v1";
+    private String taskStateTopic = "scheduler.task.state.v1";
+    private String alertsTopic = "scheduler.alerts.v1";
     private String masterGroupId = "scheduler-master";
     private String writerGroupId = "scheduler-command-writer";
     private String clientId = "scheduler-master";
@@ -42,6 +44,12 @@ public class MasterKafkaProperties {
 
     public String getReadyTopic() { return readyTopic; }
     public void setReadyTopic(String readyTopic) { this.readyTopic = readyTopic; }
+
+    public String getTaskStateTopic() { return taskStateTopic; }
+    public void setTaskStateTopic(String taskStateTopic) { this.taskStateTopic = taskStateTopic; }
+
+    public String getAlertsTopic() { return alertsTopic; }
+    public void setAlertsTopic(String alertsTopic) { this.alertsTopic = alertsTopic; }
 
     public String getMasterGroupId() { return masterGroupId; }
     public void setMasterGroupId(String masterGroupId) { this.masterGroupId = masterGroupId; }

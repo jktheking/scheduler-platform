@@ -3,6 +3,9 @@
 # Usage:
 #   docker build -f Dockerfile --build-arg APP_MODULE=scheduler-api -t scheduler-api:demo .
 #   docker build -f Dockerfile --build-arg APP_MODULE=scheduler-master -t scheduler-master:demo .
+#   docker build -f Dockerfile --build-arg APP_MODULE=scheduler-worker -t scheduler-worker:demo .
+
+
 
 #docker image rm scheduler-api:demo
 #docker image rm scheduler-master:demo 

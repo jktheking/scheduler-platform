@@ -2,6 +2,7 @@ package com.acme.scheduler.meter;
 
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.LongHistogram;
 import io.opentelemetry.api.metrics.Meter;
 
 import java.util.Map;
@@ -17,6 +18,12 @@ public final class OtelSchedulerMeter implements SchedulerMeter {
   public Counter counter(String name, String description) {
     LongCounter c = meter.counterBuilder(name).setDescription(description).build();
     return (value, labels) -> c.add(value, toAttributes(labels));
+  }
+
+  @Override
+  public Histogram histogram(String name, String description, String unit) {
+    LongHistogram h = meter.histogramBuilder(name).ofLongs().setDescription(description).setUnit(unit).build();
+    return (value, labels) -> h.record(value, toAttributes(labels));
   }
 
   private static Attributes toAttributes(Map<String, String> labels) {

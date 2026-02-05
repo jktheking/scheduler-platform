@@ -2,6 +2,7 @@ package com.acme.scheduler.master.config;
 
 import com.acme.scheduler.master.adapter.jdbc.JdbcCommandQueue;
 import com.acme.scheduler.master.adapter.jdbc.JdbcWorkflowScheduler;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.acme.scheduler.master.observability.MasterMetrics;
 import com.acme.scheduler.master.port.CommandQueue;
 import com.acme.scheduler.master.port.WorkflowScheduler;
@@ -23,8 +24,8 @@ public class MasterRuntimeConfig {
   }
 
   @Bean
-  public WorkflowScheduler workflowScheduler(JdbcTemplate jdbc) {
-    return new JdbcWorkflowScheduler(jdbc);
+  public WorkflowScheduler workflowScheduler(JdbcTemplate jdbc, ObjectMapper mapper) {
+    return new JdbcWorkflowScheduler(jdbc, mapper);
   }
 
   /**

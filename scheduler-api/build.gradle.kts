@@ -18,15 +18,14 @@ dependencies {
  implementation(libs.spring.boot.starter.validation)
  implementation(libs.spring.boot.starter.actuator)
 
- implementation("org.springframework.boot:spring-boot-starter-jdbc")
- implementation("com.fasterxml.jackson.core:jackson-databind:2.17.2")
+ implementation(libs.spring.boot.starter.jdbc)
+ // Jackson comes transitively from spring-boot-starter-web
+
  // OTel API comes transitively from :scheduler-meter (centralized).
 
  implementation(libs.springdoc.openapi.ui)
  runtimeOnly(libs.postgresql)
 
- testImplementation(platform("org.junit:junit-bom:5.11.3"))
- testImplementation("org.junit.jupiter:junit-jupiter")
 }
 
  

@@ -23,6 +23,12 @@ public final class MasterMetrics {
   public final SchedulerMeter.Counter readyPublished;
   public final SchedulerMeter.Counter readyPublishError;
 
+  public final SchedulerMeter.Counter dagMaterializeCount;
+  public final SchedulerMeter.Counter dagEnqueueCount;
+  public final SchedulerMeter.Counter dagProgressUnblocked;
+  public final SchedulerMeter.Counter retryScheduled;
+  public final SchedulerMeter.Counter dlqCreated;
+
   public MasterMetrics(SchedulerMeter meter) {
     this.commandClaimed = meter.counter("scheduler.master.command.claimed", "Commands claimed from DB queue");
     this.commandProcessed = meter.counter("scheduler.master.command.processed", "Commands processed from DB queue");
@@ -37,5 +43,11 @@ public final class MasterMetrics {
 
     this.readyPublished = meter.counter("scheduler.master.ready.published", "Ready events published");
     this.readyPublishError = meter.counter("scheduler.master.ready.publish.error", "Ready publish errors");
+
+    this.dagMaterializeCount = meter.counter("scheduler.master.dag.materialize.count", "DAG materializations");
+    this.dagEnqueueCount = meter.counter("scheduler.master.dag.enqueue.count", "DAG task enqueues");
+    this.dagProgressUnblocked = meter.counter("scheduler.master.dag.progress.unblocked.count", "Tasks unblocked by DAG progression");
+    this.retryScheduled = meter.counter("scheduler.master.retry.scheduled.count", "Retries scheduled");
+    this.dlqCreated = meter.counter("scheduler.master.dlq.created.count", "DLQ tasks created");
   }
 }

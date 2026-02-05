@@ -72,7 +72,7 @@ public final class JdbcTriggerRepository {
     SqlRowSet rs = jdbc.queryForRowSet("""
       SELECT trigger_id, workflow_instance_id, due_time
       FROM t_trigger
-      WHERE status='DUE' AND due_time <= ?
+      WHERE status IN ('DUE','ENQUEUED') AND due_time <= ?
       ORDER BY due_time ASC
       LIMIT ?
     """, Timestamp.from(upperBound), limit);
@@ -87,5 +87,13 @@ public final class JdbcTriggerRepository {
       UPDATE t_trigger SET status='ENQUEUED', updated_at=now()
       WHERE trigger_id=? AND status='DUE'
     """, triggerId);
+  }
+
+  /** Insert a new due trigger for a workflow instance (used for retries and wakeups). */
+  public void scheduleTrigger(long workflowInstanceId, Instant dueTime) {
+    jdbc.update("""
+      INSERT INTO t_trigger(workflow_instance_id, due_time, status, updated_at)
+      VALUES (?, ?, 'DUE', now())
+    """, workflowInstanceId, Timestamp.from(dueTime));
   }
 }

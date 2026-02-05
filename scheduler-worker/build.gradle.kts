@@ -10,10 +10,14 @@ dependencies {
  implementation(project(":scheduler-dao"))
  implementation(project(":scheduler-remote"))
  implementation(project(":scheduler-meter"))
+ implementation(project(":scheduler-common"))
+
+ implementation(libs.kafka.clients)
+ implementation(libs.spring.boot.starter.jdbc)
+
+ runtimeOnly(libs.postgresql)
 
  implementation(libs.spring.boot.starter.web)
  implementation(libs.spring.boot.starter.actuator)
 
- testImplementation(platform("org.junit:junit-bom:5.11.3"))
- testImplementation("org.junit.jupiter:junit-jupiter")
 }

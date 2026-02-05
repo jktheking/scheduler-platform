@@ -4,6 +4,12 @@ server:
 spring:
   application:
     name: scheduler-api
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/scheduler}
+    username: ${DB_USER:scheduler}
+    password: ${DB_PASS:scheduler}
+  flyway:
+    enabled: true
 
 # Choose ingestion mode:
 # - INMEMORY (default dev)

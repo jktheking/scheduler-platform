@@ -13,7 +13,7 @@ dependencies {
 
   // Java 9+ no longer bundles javax.annotation.*; gRPC generated stubs still reference it.
   // Use compileOnly so it doesn't leak into consumers.
-  compileOnly("javax.annotation:javax.annotation-api:1.3.2")
+  compileOnly(libs.javax.annotation.api)
 }
 
 protobuf {

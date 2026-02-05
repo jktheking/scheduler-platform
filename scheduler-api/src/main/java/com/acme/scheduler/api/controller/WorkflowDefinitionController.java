@@ -1,44 +1,62 @@
+
 package com.acme.scheduler.api.controller;
 
-import com.acme.scheduler.api.dto.ApiResponse;
-import com.acme.scheduler.api.dto.PageResponse;
-import com.acme.scheduler.api.dto.workflow.CreateWorkflowDefinitionRequest;
-import com.acme.scheduler.api.dto.workflow.WorkflowDefinitionDto;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.time.Instant;
-import java.util.List;
+import com.acme.scheduler.service.workflowdef.UpsertWorkflowDefinitionUseCase;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @RestController
-@RequestMapping("/scheduler/projects/{projectCode}/process-definition")
-@Tag(name = "Workflow Definition APIs")
+@RequestMapping("/scheduler/workflow-definitions")
 public class WorkflowDefinitionController {
 
- @PostMapping("/create")
- public ApiResponse<WorkflowDefinitionDto> create(@PathVariable long projectCode,
- @Valid @RequestBody CreateWorkflowDefinitionRequest req) {
-// Stub implementation: real service wiring comes in Step 2+
- WorkflowDefinitionDto dto = new WorkflowDefinitionDto(
- 900001L, 1, req.name(), req.description(), "OFFLINE", Instant.now(), Instant.now()
- );
- return ApiResponse.ok(dto);
- }
+  private final UpsertWorkflowDefinitionUseCase useCase;
+  private final ObjectMapper mapper;
 
- @GetMapping("/list")
- public ApiResponse<PageResponse<WorkflowDefinitionDto>> list(@PathVariable long projectCode,
- @RequestParam(defaultValue = "1") int pageNo,
- @RequestParam(defaultValue = "10") int pageSize,
- @RequestParam(required = false) String searchVal) {
- var items = List.of(new WorkflowDefinitionDto(900001L, 1, "daily_etl", "demo", "OFFLINE", Instant.now(), Instant.now()));
- return ApiResponse.ok(new PageResponse<>(1, pageNo, pageSize, items));
- }
+  public WorkflowDefinitionController(UpsertWorkflowDefinitionUseCase useCase, ObjectMapper mapper) {
+    this.useCase = useCase;
+    this.mapper = mapper;
+  }
 
- @PostMapping("/release")
- public ApiResponse<Void> release(@PathVariable long projectCode,
- @RequestParam long code,
- @RequestParam String releaseState) {
- return ApiResponse.ok(null);
- }
+  @PostMapping("/create")
+  public ResponseEntity<?> create(@RequestBody CreateWorkflowDefinitionRequest req) throws Exception {
+    JsonNode tasks = mapper.readTree(req.getTaskDefinitionJson() == null ? "[]" : req.getTaskDefinitionJson());
+    JsonNode edges = mapper.readTree(req.getTaskRelationJson() == null ? "[]" : req.getTaskRelationJson());
+
+    var r = useCase.handle(
+        req.getTenantId(),
+        req.getName(),
+        tasks,
+        edges,
+        req.getWorkflowCode()
+    );
+
+    return ResponseEntity.ok(new CreateWorkflowDefinitionResponse(r.workflowCode(), r.workflowVersion()));
+  }
+
+  public static class CreateWorkflowDefinitionRequest {
+    private String tenantId;
+    private String name;
+    private String taskDefinitionJson;
+    private String taskRelationJson;
+    private Long workflowCode;
+
+    public String getTenantId() { return tenantId; }
+    public void setTenantId(String tenantId) { this.tenantId = tenantId; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public String getTaskDefinitionJson() { return taskDefinitionJson; }
+    public void setTaskDefinitionJson(String taskDefinitionJson) { this.taskDefinitionJson = taskDefinitionJson; }
+    public String getTaskRelationJson() { return taskRelationJson; }
+    public void setTaskRelationJson(String taskRelationJson) { this.taskRelationJson = taskRelationJson; }
+    public Long getWorkflowCode() { return workflowCode; }
+    public void setWorkflowCode(Long workflowCode) { this.workflowCode = workflowCode; }
+  }
+
+  public record CreateWorkflowDefinitionResponse(long workflowCode, int workflowVersion) {}
 }
