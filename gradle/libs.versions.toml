@@ -36,6 +36,8 @@ postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" 
 
 # ---- Jackson ----
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
+jackson-datatype-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson" }
+
 
 # ---- gRPC / Protobuf ----
 grpc-netty = { module = "io.grpc:grpc-netty-shaded", version.ref = "grpc" }

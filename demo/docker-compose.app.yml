@@ -39,12 +39,14 @@ services:
       JAVA_TOOL_OPTIONS: >
         -javaagent:/otel/opentelemetry-javaagent.jar
         -Dotel.javaagent.debug=false
+        -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
 
     volumes:
       - ./otel/opentelemetry-javaagent.jar:/otel/opentelemetry-javaagent.jar:ro
 
     ports:
       - "8080:8080"
+      - "5005:5005"
 
     restart: unless-stopped
     networks: [scheduler-net]
@@ -83,7 +85,9 @@ services:
       JAVA_TOOL_OPTIONS: >
         -javaagent:/otel/opentelemetry-javaagent.jar
         -Dotel.javaagent.debug=false
-
+        -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5006
+    ports:
+    - "5006:5006"				
     volumes:
       - ./otel/opentelemetry-javaagent.jar:/otel/opentelemetry-javaagent.jar:ro
 
@@ -122,7 +126,9 @@ services:
       JAVA_TOOL_OPTIONS: >
         -javaagent:/otel/opentelemetry-javaagent.jar
         -Dotel.javaagent.debug=false
-
+        -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5007
+    ports:
+    - "5007:5007"
     volumes:
       - ./otel/opentelemetry-javaagent.jar:/otel/opentelemetry-javaagent.jar:ro
 
