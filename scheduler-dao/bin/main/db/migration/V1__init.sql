@@ -54,7 +54,8 @@ CREATE TABLE IF NOT EXISTS t_workflow_instance (
   status               TEXT NOT NULL,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
-  schedule_time        TIMESTAMPTZ NOT NULL
+  schedule_time        TIMESTAMPTZ NOT NULL,
+  last_error           TEXT NULL
 );
 
 CREATE INDEX IF NOT EXISTS ix_wi_tenant_code_status
@@ -73,6 +74,7 @@ CREATE TABLE IF NOT EXISTS t_trigger (
   status               TEXT NOT NULL, -- DUE | ENQUEUED | PROCESSING | DONE | FAILED
   claimed_by           TEXT NULL,
   claimed_at           TIMESTAMPTZ NULL,
+  last_error           TEXT NULL,
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

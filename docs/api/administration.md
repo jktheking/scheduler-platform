@@ -1,7 +1,7 @@
 # Administration APIs
 
-Base: `/scheduler/users`
+Base: `/api/v1/users`
 
 ## List users
 
-`GET/list?pageNo=1&pageSize=10`
+`GET /api/v1/users?pageNo=1&pageSize=10`

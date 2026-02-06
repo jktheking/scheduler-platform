@@ -94,7 +94,7 @@ public final class DefaultDagRuntime implements DagRuntime {
           retryPlanner.scheduleRetry(evt.workflowInstanceId(), evt.taskInstanceId(), evt.errorMessage() == null ? "FAILED" : evt.errorMessage(), Duration.ofSeconds(2), Duration.ofMinutes(5));
         }
         case "DLQ" -> {
-          wi.markWorkflowFailed(evt.workflowInstanceId());
+          wi.markWorkflowFailed(evt.workflowInstanceId(), evt.errorMessage() == null ? "DLQ" : evt.errorMessage());
         }
         default -> {
           // ignore STARTED etc

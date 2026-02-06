@@ -145,6 +145,6 @@
   "time": { "from": "now-15m", "to": "now" },
   "timepicker": {},
   "timezone": "",
-  "title": "Scheduler Demo (Phase B+C)",
+  "title": "Scheduler Demo Dashboard",
   "version": 1
 }

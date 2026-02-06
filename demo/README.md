@@ -4,69 +4,64 @@ This demo runs the full end-to-end pipeline locally:
 
 **API → Kafka (WAL commands) → Master (persist + schedule + DAG) → Kafka (ready tasks) → Worker (exec HTTP/SCRIPT) → Kafka (task state) → Master (advance DAG) → Postgres + Metrics (Prometheus/Grafana)**
 
+The API follows REST-style paths under **`/api/v1`** and uses **tenant routing via header**:
+
+- `X-Tenant-Id: default` (required for workflow definition APIs; accepted for others)
+
 ---
 
 ## Quick index
 
-- [Services & URLs](#services--urls)
+- [Prerequisites](#prerequisites)
+- [Services and ports](#services-and-ports)
 - [Bring everything up](#bring-everything-up)
-- [Connect to UIs (pgAdmin, Kafka UI, Prometheus, Grafana)](#connect-to-uis-pgadmin-kafka-ui-prometheus-grafana)
-- [Run an end-to-end verification](#run-an-end-to-end-verification)
-- [Smoke test script](#smoke-test-script)
-- [Tear down & cleanup](#tear-down--cleanup)
+- [Demo walkthrough](#demo-walkthrough)
+- [Validate via Postgres](#validate-via-postgres)
+- [Validate via Kafka UI and Kafka CLI](#validate-via-kafka-ui-and-kafka-cli)
+- [Validate via Prometheus](#validate-via-prometheus)
+- [Validate via Grafana](#validate-via-grafana)
 - [Postman collection](#postman-collection)
-- [Troubleshooting](#troubleshooting)
+- [Troubleshooting and debugging](#troubleshooting-and-debugging)
+- [Tear down and cleanup](#tear-down-and-cleanup)
 
 ---
 
-## Services & URLs
+## Prerequisites
 
-> All services below are defined in:
-> - `demo/docker-compose.infra.yml` (infra/observability)
+- Docker Desktop (or Docker Engine) with **Docker Compose v2**
+- `curl`
+- Optional but recommended: `jq`
+
+---
+
+## Services and ports
+
+> Compose files:
+> - `demo/docker-compose.infra.yml` (infra + observability)
 > - `demo/docker-compose.app.yml` (application services)
 
-### Infra + Observability services (docker-compose.infra.yml)
+### Infra + Observability (docker-compose.infra.yml)
 
-| Postgres 16 | `scheduler-postgres` | `localhost:5432` | Metadata store (commands, workflow instances, triggers, task instances, idempotency) |
+| Service | Container | Host URL / Port | Purpose | Credentials / Notes |
+|---|---|---:|---|---|
+| Postgres 16 | `scheduler-postgres` | `localhost:5432` | Metadata store | DB=`scheduler`, user=`scheduler`, pass=`scheduler` |
+| pgAdmin | `scheduler-pgadmin` | http://localhost:5050 | Postgres UI | login=`admin@scheduler.com`, pass=`admin` |
+| Kafka (KRaft) | `scheduler-kafka` | `localhost:9092` | WAL + ready + state topics | Internal docker listener: `kafka:29092` |
+| Kafka UI | `scheduler-kafka-ui` | http://localhost:8088 | Browse topics/messages/groups | Cluster `local` preconfigured |
+| Flyway | `scheduler-flyway` | (no UI) | Runs DB migrations at startup | Check logs: `docker logs -f scheduler-flyway` |
+| OTel Collector | `scheduler-otel-collector` | `localhost:4317` / `localhost:4318` | OTLP ingest (traces/metrics) | Exposes Prometheus exporter for Prometheus scrape |
+| Prometheus | `scheduler-prometheus` | http://localhost:9090 | Metrics store/query | `Status → Targets` should show OTel collector |
+| Grafana | `scheduler-grafana` | http://localhost:3000 | Dashboards | login=`admin`, pass=`admin` |
 
-| pgAdmin | `scheduler-pgadmin` | http://localhost:5050 | Postgres UI |
+### Application (docker-compose.app.yml)
 
-| Kafka (KRaft) | `scheduler-kafka` | `localhost:9092` | Topics for WAL + ready tasks + state events |
-
-| Kafka UI | `scheduler-kafka-ui` | http://localhost:8088 | Kafka browser (topics, messages, consumer groups) |
-
-| Flyway | `scheduler-flyway` | (no UI) | Runs DB migrations on startup |
-
-| OTel Collector | `scheduler-otel-collector` | `localhost:4317/4318` | Receives OTLP from Java services, exports metrics to Prometheus |
-
-| Prometheus | `scheduler-prometheus` | http://localhost:9090 | Metrics store/query |
-
-| Grafana | `scheduler-grafana` | http://localhost:3000 | Dashboards |
-
-**Default credentials (from compose):**
-- **Postgres**
-  - DB: `scheduler`
-  - User: `scheduler`
-  - Password: `scheduler`
-  - Host from your laptop: `localhost:5432`
-  - Host from other containers (docker network): `postgres:5432`
-- **pgAdmin**
-  - URL: http://localhost:5050
-  - Login: `admin@scheduler.com`
-  - Password: `admin`
-- **Grafana**
-  - URL: http://localhost:3000
-  - Login: `admin`
-  - Password: `admin`
-
-### Application services (docker-compose.app.yml)
-
-
-| Scheduler API    | `scheduler-api`    | http://localhost:8080 | REST ingestion + workflow defs + execution control |
-| Scheduler Master | `scheduler-master` | (no host port) | Consumes commands WAL; schedules triggers; materializes DAG; publishes ready tasks; consumes task state |
+| Service | Container | Host URL / Port | Purpose |
+|---|---|---:|---|
+| Scheduler API | `scheduler-api` | http://localhost:8080 | REST ingestion + defs + query |
+| Scheduler Master | `scheduler-master` | (no host port) | Consumes WAL; schedules triggers; owns DAG runtime; publishes ready tasks; consumes task state |
 | Scheduler Worker | `scheduler-worker` | (no host port) | Consumes ready tasks; executes HTTP/SCRIPT; publishes task state |
 
-API endpoints you will use most:
+API entry points:
 - Swagger UI: http://localhost:8080/swagger-ui/index.html
 - Health: http://localhost:8080/actuator/health
 
@@ -77,16 +72,14 @@ API endpoints you will use most:
 From repository root:
 
 ```bash
-# 1) infra
+# 1) Infra
 docker compose -f demo/docker-compose.infra.yml up -d
 
-# (optional but useful) wait until flyway completed migrations
+# Wait for Flyway to complete
 docker logs -f scheduler-flyway
 
-# 2) app
+# 2) App (build + run)
 docker compose -f demo/docker-compose.app.yml up -d --build
-
-docker compose -f demo/docker-compose.app.yml up  --build
 ```
 
 Verify containers:
@@ -97,84 +90,7 @@ docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
 ---
 
-## Connect to UIs (pgAdmin, Kafka UI, Prometheus, Grafana)
-
-### pgAdmin (connect to Postgres)
-
-1. Open: http://localhost:5050  
-   Login: `admin@scheduler.com` / `admin`
-2. Add a server:
-   - **Name:** `scheduler-local`
-   - **Host name/address:** `postgres` *(important: this is the container DNS name on the docker network)*
-   - **Port:** `5432`
-   - **Maintenance database:** `scheduler`
-   - **Username:** `scheduler`
-   - **Password:** `scheduler`
-3. After connecting, open Query Tool and run:
-
-```sql
-select now();
-select count(*) from t_command;
-select count(*) from t_workflow_instance;
-select count(*) from t_task_instance;
-```
-
-### Kafka UI
-
-1. Open: http://localhost:8088  
-2. Cluster `local` is preconfigured to `kafka:29092` (internal docker listener).
-3. Useful places:
-   - **Topics** → pick a topic → **Messages** to see payloads
-   - **Consumers** → observe consumer group lag (master/worker)
-
-Topics created on infra startup (`kafka-init` container):
-- `scheduler.commands.v1` (API → Master)
-- `scheduler.tasks.ready.v1` (Master → Worker)
-- `scheduler.task.state.v1` (Worker → Master)
-- `scheduler.alerts.v1` (alerts)
-
-### Kafka CLI (handy commands)
-
-These run against the Kafka container:
-
-```bash
-# List topics (internal docker listener)
-docker exec -it scheduler-kafka bash -lc "kafka-topics --bootstrap-server kafka:29092 --list"
-
-# Consume 5 messages from WAL (from beginning)
-docker exec -it scheduler-kafka bash -lc "kafka-console-consumer --bootstrap-server kafka:29092 --topic scheduler.commands.v1 --from-beginning --max-messages 5"
-
-# Consume 5 messages from ready tasks
-docker exec -it scheduler-kafka bash -lc "kafka-console-consumer --bootstrap-server kafka:29092 --topic scheduler.tasks.ready.v1 --from-beginning --max-messages 5"
-
-# Consume 5 messages from task state
-docker exec -it scheduler-kafka bash -lc "kafka-console-consumer --bootstrap-server kafka:29092 --topic scheduler.task.state.v1 --from-beginning --max-messages 5"
-```
-
-### Prometheus
-
-Open: http://localhost:9090
-
-1. Check scrape targets: **Status → Targets**
-2. Try queries:
-   - `up`
-   - `rate(scheduler_command_publish_total[1m])`
-   - `rate(scheduler_master_command_kafka_consumed_total[1m])`
-   - `rate(scheduler_master_ready_published_total[1m])`
-   - `rate(scheduler_worker_task_success_count_total[1m])`
-   - `rate(scheduler_worker_task_fail_count_total[1m])`
-
-### Grafana
-
-Open: http://localhost:3000 (admin/admin)
-
-1. **Connections → Data sources**: Prometheus is provisioned.
-2. **Dashboards**: A demo dashboard is provisioned from `demo/grafana/*`.
-3. After running workflows, you should see activity in ingestion/master/worker panels.
-
----
-
-## Run an end-to-end verification
+## Demo walkthrough
 
 ### Step 0 — confirm API is healthy
 
@@ -182,16 +98,21 @@ Open: http://localhost:3000 (admin/admin)
 curl -fsS http://localhost:8080/actuator/health
 ```
 
-### Step 1 — Create 2 workflow definitions (HTTP + SCRIPT)
+### Step 1 — Create workflow definitions
+
+This creates 2 small workflows to prove the runtime:
+
+- **HTTP-only**: one HTTP task
+- **SCRIPT-only**: one SCRIPT task
 
 HTTP-only:
 
 ```bash
-curl -sS -X POST "http://localhost:8080/scheduler/workflow-definitions/create" \
+curl -sS -X POST "http://localhost:8080/api/v1/workflow-definitions" \
   -H "Content-Type: application/json" \
+  -H "X-Tenant-Id: default" \
   -d @- <<'JSON'
 {
-  "tenantId": "default",
   "name": "demo_http_only",
   "workflowCode": null,
   "taskDefinitionJson": "[{\"name\":\"HTTP_1\",\"taskType\":\"HTTP\",\"definition\":{\"method\":\"GET\",\"url\":\"https://postman-echo.com/get?hello=world\",\"timeoutMs\":10000,\"headers\":{\"accept\":\"application/json\"}}}]",
@@ -203,11 +124,11 @@ JSON
 SCRIPT-only:
 
 ```bash
-curl -sS -X POST "http://localhost:8080/scheduler/workflow-definitions/create" \
+curl -sS -X POST "http://localhost:8080/api/v1/workflow-definitions" \
   -H "Content-Type: application/json" \
+  -H "X-Tenant-Id: default" \
   -d @- <<'JSON'
 {
-  "tenantId": "default",
   "name": "demo_script_only",
   "workflowCode": null,
   "taskDefinitionJson": "[{\"name\":\"SCRIPT_1\",\"taskType\":\"SCRIPT\",\"definition\":{\"inline\":\"#!/usr/bin/env bash\\necho 'hello from script'\\nexit 0\\n\",\"timeoutMs\":30000,\"maxOutputBytes\":16384,\"env\":{\"DEMO\":\"1\"}}}]",
@@ -216,23 +137,21 @@ curl -sS -X POST "http://localhost:8080/scheduler/workflow-definitions/create" \
 JSON
 ```
 
-✅ Copy the returned `workflowCode` values. You will use them below.
+The response returns a `workflowCode` — save it (you will use it in Step 2).
 
-### Step 2 — Start workflow instances (scheduled “now”)
-
-Endpoint:  
-`POST /scheduler/projects/{projectCode}/executors/start-process-instance`
-
-HTTP instance example:
+### Step 2 — Start workflow instance (ingestion to Kafka WAL)
 
 ```bash
-curl -sS -X POST "http://localhost:8080/scheduler/projects/1/executors/start-process-instance" \
+NOW="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+curl -sS -X POST "http://localhost:8080/api/v1/projects/1/workflow-instances" \
   -H "Content-Type: application/json" \
+  -H "X-Tenant-Id: default" \
   -H "traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" \
   -d @- <<JSON
 {
-  "processDefinitionCode": <HTTP_WORKFLOW_CODE>,
-  "scheduleTime": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "processDefinitionCode": <workflowCode>,
+  "scheduleTime": "$NOW",
   "execType": "START_PROCESS",
   "failureStrategy": "END",
   "warningType": "NONE",
@@ -242,183 +161,252 @@ curl -sS -X POST "http://localhost:8080/scheduler/projects/1/executors/start-pro
   "runMode": "RUN_PARALLEL",
   "startNodeList": "[]",
   "taskDependType": "TASK_ONLY",
-  "idempotencyKey": "demo-http-001"
+  "idempotencyKey": "demo-start-001"
 }
 JSON
 ```
 
-SCRIPT instance: same payload, just replace the code and idempotencyKey.
+> Important: the ingestion endpoint is **asynchronous**. The API accepts the command; the **master** creates the actual workflow instance later.
+>
+> To find the `workflow_instance_id`, use the DB validation queries below.
 
-### Step 3 — Verify pipeline (one clear path)
+### Step 3 — Run the scripted end-to-end DAG demo
 
-#### A) API → Kafka WAL
+This repo ships scripts that create a larger DAG and start it:
 
-Kafka UI → `scheduler.commands.v1` → Messages  
-✅ You should see a command produced after calling `start-process-instance`.
+- `demo/e2e.sh` (A fan-out/fan-in DAG)
+- `demo/smoke.sh` (creates 2 workflows + starts 2 instances + validates Kafka/DB)
 
-#### B) Master → Postgres persistence
-
-In pgAdmin Query Tool:
-
-```sql
--- commands
-select * from t_command order by created_at desc limit 5;
-
--- idempotency dedupe
-select * from t_command_dedupe order by processed_at desc limit 5;
-```
-
-Expected:
-- `t_command` has at least one row per ingest request
-- `t_command_dedupe` records processed commands (idempotency)
-
-#### C) Master scheduling → triggers + workflow instance
-
-```sql
-select * from t_workflow_instance order by workflow_instance_id desc limit 5;
-select * from t_trigger order by trigger_id desc limit 10;
-```
-
-Expected:
-- Workflow instance row exists; `schedule_time` matches the request (or normalized to now if in the past)
-- Trigger row exists with `due_time = schedule_time`
-- Trigger progresses to `DONE` after processing
-
-#### D) DAG materialization → tasks created
-
-```sql
-select task_instance_id, workflow_instance_id, task_code, attempt, status, created_at
-from t_task_instance
-order by task_instance_id desc
-limit 20;
-```
-
-Expected:
-- At least one task row for each started workflow
-- Status progresses to terminal (`SUCCESS` or `FAILED`)
-
-#### E) Master → Kafka ready queue
-
-Kafka UI → `scheduler.tasks.ready.v1`  
-✅ A message appears when a task becomes runnable.
-
-#### F) Worker execution → Kafka state events
-
-Kafka UI → `scheduler.task.state.v1`  
-✅ You should see `STARTED` and a terminal event for the task.
-
-#### G) Master consumes state → workflow completes
-
-```sql
-select workflow_instance_id, status, created_at, updated_at
-from t_workflow_instance
-order by workflow_instance_id desc
-limit 10;
-```
-
-Expected:
-- For single-task workflows, status should reach a terminal state quickly.
-
----
-
-## Smoke test script
-
-A ready-to-run smoke script is included:
-
-- `demo/smoke.sh`
-
-Run it from repo root:
+Run:
 
 ```bash
+bash demo/e2e.sh
+# or
 bash demo/smoke.sh
 ```
 
-If you want the script to also bring up docker compose first:
-
-```bash
-bash demo/smoke.sh up
-```
-
-Environment overrides:
-- `BASE_URL` (default `http://localhost:8080`)
-- `PROJECT_CODE` (default `1`)
+Both scripts use `/api/v1/...` and set `X-Tenant-Id` correctly.
 
 ---
 
-## Tear down & cleanup
+## Validate via Postgres
 
-### Normal stop (keep volumes)
+Use either pgAdmin or psql.
 
-```bash
-docker compose -f demo/docker-compose.app.yml down
-docker compose -f demo/docker-compose.infra.yml down
+### pgAdmin connection (recommended for UI)
+
+1. Open: http://localhost:5050  
+   Login: `admin@scheduler.com` / `admin`
+2. Add a server:
+   - **Name:** `scheduler-local`
+   - **Host name/address:** `postgres` (docker DNS name)
+   - **Port:** `5432`
+   - **Maintenance database:** `scheduler`
+   - **Username:** `scheduler`
+   - **Password:** `scheduler`
+
+### “What happened?” queries (copy/paste)
+
+**Latest commands (API → master):**
+
+```sql
+select id, tenant_id, workflow_code, command_type, status, created_at, last_error_message
+from t_command
+order by id desc
+limit 20;
 ```
 
-### Hard cleanup (remove volumes + local images created by compose)
+**Latest workflow instances (master-owned):**
 
-```bash
-docker compose -f demo/docker-compose.app.yml down -v --rmi local
-docker compose -f demo/docker-compose.infra.yml down -v --rmi local
+```sql
+select id, tenant_id, workflow_code, workflow_version, status, created_at, updated_at, last_error
+from t_workflow_instance
+order by id desc
+limit 10;
 ```
 
-### Useful purge commands (be careful)
+**Latest triggers (scheduling + retries):**
+
+```sql
+select id, workflow_instance_id, status, due_time, claimed_by, last_error
+from t_trigger
+order by id desc
+limit 20;
+```
+
+**Task instances (worker execution plane):**
+
+```sql
+select id, workflow_instance_id, task_code, task_name, status, attempt, claimed_by, started_at, finished_at, last_error
+from t_task_instance
+order by id desc
+limit 50;
+```
+
+**Find the most recent workflow instance id to use in API queries:**
+
+```sql
+select id
+from t_workflow_instance
+order by id desc
+limit 1;
+```
+
+---
+
+## Validate via Kafka UI and Kafka CLI
+
+### Kafka UI (recommended)
+
+1. Open: http://localhost:8088
+2. Click **Topics** and inspect:
+   - `scheduler.commands.v1` (API → master)
+   - `scheduler.tasks.ready.v1` (master → worker)
+   - `scheduler.task.state.v1` (worker → master)
+3. Check consumer groups:
+   - master group consuming commands
+   - worker group consuming ready tasks
+   - master group consuming task state
+
+### Kafka CLI (handy copy/paste)
 
 ```bash
-# Remove ALL stopped containers
-docker container prune -f
+docker exec -it scheduler-kafka bash -lc "kafka-topics --bootstrap-server kafka:29092 --list"
 
-# Remove dangling images
-docker image prune -f
-
-# Remove unused volumes (this deletes persisted Postgres/Kafka data!)
-docker volume prune -f
-
-# Remove unused networks
-docker network prune -f
+docker exec -it scheduler-kafka bash -lc "kafka-console-consumer --bootstrap-server kafka:29092 --topic scheduler.commands.v1 --from-beginning --max-messages 5"
+docker exec -it scheduler-kafka bash -lc "kafka-console-consumer --bootstrap-server kafka:29092 --topic scheduler.tasks.ready.v1 --from-beginning --max-messages 5"
+docker exec -it scheduler-kafka bash -lc "kafka-console-consumer --bootstrap-server kafka:29092 --topic scheduler.task.state.v1 --from-beginning --max-messages 5"
 ```
+
+---
+
+## Validate via Prometheus
+
+Open: http://localhost:9090
+
+1. **Status → Targets**: ensure scrape targets are UP
+2. Run these example queries:
+
+- Service liveness:
+  - `up`
+- Ingestion:
+  - `rate(scheduler_command_publish_total[1m])`
+  - `rate(scheduler_master_command_kafka_consumed_total[1m])`
+- Master scheduling:
+  - `rate(scheduler_master_trigger_due_total[1m])`
+  - `rate(scheduler_master_ready_published_total[1m])`
+- Worker:
+  - `rate(scheduler_worker_task_started_total[1m])`
+  - `rate(scheduler_worker_task_success_count_total[1m])`
+  - `rate(scheduler_worker_task_fail_count_total[1m])`
+
+> Metric names may vary slightly depending on the build. If a query returns empty, search by prefix:
+> - `{__name__=~"scheduler_.*"}`
+
+---
+
+## Validate via Grafana
+
+Open: http://localhost:3000 (admin/admin)
+
+### Step-by-step dashboard navigation
+
+1. Go to **Connections → Data sources**
+   - Ensure **Prometheus** is present and healthy
+2. Go to **Dashboards**
+   - Open the demo dashboard provisioned from `demo/grafana/*`
+3. After you run `demo/smoke.sh` or `demo/e2e.sh`, you should see:
+   - ingestion rate / command publish rate
+   - master consume + ready publish
+   - worker execution successes/failures
+   - queue delay histograms (if enabled)
+
+### If dashboard shows “No data”
+- Confirm Prometheus targets are up: http://localhost:9090/targets
+- Confirm OTel collector is reachable from containers
+- Look at service logs (see Troubleshooting)
 
 ---
 
 ## Postman collection
 
-A Postman collection is included at:
+A Postman collection is included and kept aligned with the current controller signatures:
 
 - `demo/postman/scheduler-platform-demo.postman_collection.json`
 
-It contains:
-- Health check
-- Create HTTP workflow definition
-- Create SCRIPT workflow definition
-- Start process instance
-- List process instances
-- Get workflow instance
-- List tasks for workflow instance
+Import into Postman and run in order:
 
-Import it into Postman and set variables:
-- `baseUrl = http://localhost:8080`
-- `projectCode = 1`
+1. Health checks
+2. Create workflow definition (HTTP-only)
+3. Create workflow definition (DAG: A fan-out/fan-in)
+4. Start workflow instance (ingestion)
+5. (Manual) Fetch latest `workflow_instance_id` from Postgres and set `workflowInstanceId` variable
+6. Query instance / tasks / tracking endpoints
 
 ---
 
-## Troubleshooting
+## Troubleshooting and debugging
 
-### Check logs
+### Where to look first
 
+**API logs**
 ```bash
-docker logs -f scheduler-api
-docker logs -f scheduler-master
-docker logs -f scheduler-worker
+docker logs scheduler-api --tail=200
 ```
 
-### Common issues
+**Master logs**
+```bash
+docker logs scheduler-master --tail=300
+```
 
-- **Flyway didn’t run / DB tables missing**  
-  Check: `docker logs scheduler-flyway`
+**Worker logs**
+```bash
+docker logs scheduler-worker --tail=300
+```
 
-- **Kafka topics missing**  
-  Check: `docker logs scheduler-kafka-init` (topics are created there)
+### Common failure modes
 
-- **App containers fail because OTel agent jar is missing**  
-  `demo/docker-compose.app.yml` mounts:
-  `demo/otel/opentelemetry-javaagent.jar`  
-  Place the file before starting the app compose.
+#### 1) OTel exporter cannot connect
+Symptom: spans export errors in logs.
+
+Fix:
+- Ensure `scheduler-otel-collector` is running
+- Verify internal docker DNS name matches compose (`otel-collector`)
+
+#### 2) Kafka not ready / topic missing
+Symptom: master/worker consumer fails to start.
+
+Fix:
+- Open Kafka UI and confirm topics exist
+- Check `kafka-init` logs in infra compose
+
+#### 3) Workflow instance is `FAILED`
+Use DB queries:
+- `t_workflow_instance.last_error`
+- `t_trigger.last_error`
+- `t_task_instance.last_error`
+- `t_command.last_error_message`
+
+Then correlate with logs using identifiers:
+- `workflowInstanceId`, `commandId`, `triggerId`, `taskInstanceId`
+
+### API “tracking” endpoint
+Once you have an instance id:
+
+- `GET /api/v1/workflow-instances/{id}/tracking`
+
+This aggregates:
+- workflow status + last_error
+- trigger summary + last_error
+- command summary + last_error_message
+- task counts by status
+
+---
+
+## Tear down and cleanup
+
+```bash
+docker compose -f demo/docker-compose.app.yml down -v
+docker compose -f demo/docker-compose.infra.yml down -v
+docker volume prune -f
+```

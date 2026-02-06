@@ -1,10 +1,14 @@
 # Workflow Execution APIs
 
-Base: `/scheduler/projects/{projectCode}/executors`
+Base: `/api/v1/projects/{projectCode}/workflow-instances`
 
-## Start process instance
+## Submit a workflow instance (ingestion)
 
-`POST/start-process-instance`
+`POST /`
+
+Headers:
+
+- `X-Tenant-Id: <tenant>` (optional for demo; if absent, the server currently defaults tenantId to the projectCode)
 
 Example body:
 
@@ -25,7 +29,7 @@ Example body:
 }
 ```
 
-Response (this implementation returns `processInstanceId` in `data`):
+Response (ingestion is asynchronous; master creates the real workflow instance later):
 
 ```json
 {"code":0,"msg":"success","data":{"id":10001,"processDefinitionCode":900001,"state":"SUBMITTED"},"success":true,"failed":false}

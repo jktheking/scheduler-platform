@@ -22,7 +22,7 @@ public final class JdbcTemplateWorkflowInstanceStatus {
         SELECT task_code, MAX(attempt) AS a
         FROM t_task_instance
         WHERE workflow_instance_id=?
-          AND task_code = ANY (?)
+          AND task_code = ANY (?::bigint[])
         GROUP BY task_code
       )
       SELECT COUNT(1)
@@ -60,7 +60,11 @@ public final class JdbcTemplateWorkflowInstanceStatus {
   }
 
   public void markWorkflowFailed(long workflowInstanceId) {
-    jdbc.update("UPDATE t_workflow_instance SET status='FAILURE', updated_at=now() WHERE workflow_instance_id=?", workflowInstanceId);
+    markWorkflowFailed(workflowInstanceId, null);
+  }
+
+  public void markWorkflowFailed(long workflowInstanceId, String lastError) {
+    jdbc.update("UPDATE t_workflow_instance SET status='FAILURE', last_error=?, updated_at=now() WHERE workflow_instance_id=?", lastError, workflowInstanceId);
   }
 
   public record InstanceKey(String tenantId, long workflowCode, int workflowVersion) {}

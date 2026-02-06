@@ -1,6 +1,6 @@
 # Resource Management APIs
 
-Base: `/scheduler/resources`
+Base: `/api/v1/resources`
 
 ## Upload resource
 

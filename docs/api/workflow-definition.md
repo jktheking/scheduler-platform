@@ -1,28 +1,42 @@
 # Workflow Definition APIs
 
-Base: `/scheduler/projects/{projectCode}/process-definition`
+Base: `/api/v1/workflow-definitions`
 
-## Create workflow definition
+## Upsert a workflow definition
 
-`POST/create`
+Persists the workflow DAG definition (tasks + edges). This endpoint **only stores** the definition; starting execution is done separately via the workflow execution APIs.
 
-Example body:
+### Endpoint
+
+`POST /api/v1/workflow-definitions`
+
+### Headers
+
+- `X-Tenant-Id: <tenant>` (**required**)
+
+### Body
+
+The API keeps the same "JSON-as-string" payload fields used internally for task and edge arrays.
 
 ```json
 {
- "projectCode": 123456789,
- "name": "daily_etl",
- "description": "daily etl pipeline",
- "locations": "{\"111\":{\"x\":100,\"y\":200}}",
- "globalParams": "[{\"prop\":\"bizDate\",\"value\":\"${system.biz.date}\"}]",
- "taskDefinitionJson": "[{\"code\":111,\"name\":\"t1\",\"type\":\"SHELL\",\"params\":\"{...}\"}]",
- "taskRelationJson": "[{\"preTaskCode\":0,\"postTaskCode\":111}]",
- "tenantCode": "default"
+  "name": "daily_etl",
+  "workflowCode": 900001,
+  "taskDefinitionJson": "[{\"code\":111,\"name\":\"A\",\"type\":\"SCRIPT\",\"params\":{}}]",
+  "taskRelationJson": "[{\"preTaskCode\":0,\"postTaskCode\":111}]"
 }
 ```
 
-Response envelope:
+Notes:
+
+- Set `workflowCode` when updating an existing definition. Omit it to create a new workflow code.
+- `taskDefinitionJson` and `taskRelationJson` are JSON arrays encoded as strings.
+
+### Response
 
 ```json
-{"code":0,"msg":"success","data":{"code":900001,"version":1,"name":"daily_etl","releaseState":"OFFLINE"},"success":true,"failed":false}
+{
+  "workflowCode": 900001,
+  "workflowVersion": 1
+}
 ```

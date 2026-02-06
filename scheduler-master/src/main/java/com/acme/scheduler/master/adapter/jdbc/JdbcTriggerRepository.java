@@ -60,8 +60,8 @@ public final class JdbcTriggerRepository {
 
   public void markFailed(long triggerId, String detail) {
     jdbc.update("""
-      UPDATE t_trigger SET status='FAILED', updated_at=now() WHERE trigger_id=?
-    """, triggerId);
+      UPDATE t_trigger SET status='FAILED', last_error=?, updated_at=now() WHERE trigger_id=?
+    """, detail, triggerId);
   }
 
   /**

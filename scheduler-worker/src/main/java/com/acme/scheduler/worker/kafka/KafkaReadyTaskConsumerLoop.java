@@ -44,6 +44,7 @@ public final class KafkaReadyTaskConsumerLoop implements Runnable {
   public void start() {
     if (!running.compareAndSet(false, true)) return;
     consumer.subscribe(List.of(props.getKafka().getReadyTopic()));
+    log.info("KafkaReadyTaskConsumerLoop started topic={} groupId={} workerId={}", props.getKafka().getReadyTopic(), props.getKafka().getGroupId(), props.getWorkerId());
     thread = new Thread(this, "kafka-ready-consumer");
     thread.setDaemon(true);
     thread.start();
@@ -66,10 +67,12 @@ public final class KafkaReadyTaskConsumerLoop implements Runnable {
             JsonNode node = mapper.readTree(rec.value());
             String payloadJson = node.path("payloadJson").asText("{}");
             TaskDispatchEnvelope env = mapper.readValue(payloadJson, TaskDispatchEnvelope.class);
+            log.info("checkpoint=worker.ready_consumed workflowInstanceId={} taskInstanceId={} taskType={} attempt={} workerId={} topic={} partition={} offset={}",
+                env.workflowInstanceId(), env.taskInstanceId(), env.taskType(), env.attempt(), props.getWorkerId(), rec.topic(), rec.partition(), rec.offset());
             ok = ok && orchestrator.handle(env, props.getWorkerId());
           } catch (Exception e) {
             ok = false;
-            log.warn("Failed to process ready record: {}", e.toString());
+            log.error("checkpoint=worker.ready_process_failed workerId={} topic={} partition={} offset={} error={}", props.getWorkerId(), rec.topic(), rec.partition(), rec.offset(), e.toString());
           }
         }
         if (ok && !records.isEmpty()) {

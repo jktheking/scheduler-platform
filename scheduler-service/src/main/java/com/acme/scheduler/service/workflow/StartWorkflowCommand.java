@@ -1,4 +1,4 @@
-package com.acme.scheduler.service.usecase;
+package com.acme.scheduler.service.workflow;
 
 import java.time.Instant;
 

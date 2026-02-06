@@ -3,11 +3,13 @@ package com.acme.scheduler.api.controller;
 import com.acme.scheduler.api.dto.ApiResponse;
 import com.acme.scheduler.service.dlq.ListDlqUseCase;
 import com.acme.scheduler.service.dlq.ReplayDlqUseCase;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/scheduler/dlq")
+@RequestMapping("/api/v1/dlq")
 @Tag(name = "DLQ APIs")
 public class DlqController {
 
@@ -26,6 +28,9 @@ public class DlqController {
     return ApiResponse.ok(list.handle("default", offset, Math.max(1, pageSize)));
   }
 
+  @Operation(summary = "Replay a DLQ task",
+      description = "Replays a DLQ entry by creating a new task attempt and scheduling an immediate trigger for the owning workflow instance.")
+  @ApiResponses({@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Replay accepted.")})
   @PostMapping("/{dlqId}/replay")
   public ApiResponse<Void> replay(@PathVariable long dlqId) {
     replay.handle(dlqId);

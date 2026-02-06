@@ -1,6 +1,6 @@
 # Scheduling APIs
 
-Base: `/scheduler/projects/{projectCode}/schedules`
+Base: `/api/v1/projects/{projectCode}/schedules`
 
 ## Create schedule
 

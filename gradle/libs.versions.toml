@@ -28,6 +28,8 @@ spring-jdbc = { module = "org.springframework:spring-jdbc", version.ref = "sprin
 
 springdoc-openapi-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
 
+slf4j-api = { module = "org.slf4j:slf4j-api" }
+
 # ---- Kafka ----
 kafka-clients = { module = "org.apache.kafka:kafka-clients", version.ref = "kafka" }
 

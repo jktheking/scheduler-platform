@@ -77,20 +77,18 @@ JSON
 )
 
 CREATE_PAYLOAD=$(jq -n \
-  --arg tenantId "$TENANT_ID" \
   --arg name "demo_A_fanout_fanin_D" \
   --arg taskDefinitionJson "$TASK_DEFS" \
   --arg taskRelationJson "$EDGES" \
-  '{
-    tenantId: $tenantId,
-    name: $name,
+  '{    name: $name,
     taskDefinitionJson: $taskDefinitionJson,
     taskRelationJson: $taskRelationJson
   }'
 )
 
-CREATE_RESP=$(curl -sS -X POST "$API_BASE/scheduler/workflow-definitions/create" \
+CREATE_RESP=$(curl -sS -X POST "$API_BASE/api/v1/workflow-definitions" \
   -H "Content-Type: application/json" \
+  -H "X-Tenant-Id: $TENANT_ID" \
   -d "$CREATE_PAYLOAD")
 
 echo "$CREATE_RESP" | jq .
@@ -131,7 +129,7 @@ START_PAYLOAD=$(jq -n \
   }'
 )
 
-START_RESP=$(curl -sS -X POST "$API_BASE/scheduler/projects/$PROJECT_CODE/executors/start-process-instance" \
+START_RESP=$(curl -sS -X POST "$API_BASE/api/v1/projects/$PROJECT_CODE/workflow-instances" \
   -H "Content-Type: application/json" \
   -H "traceparent: 00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01" \
   -d "$START_PAYLOAD")

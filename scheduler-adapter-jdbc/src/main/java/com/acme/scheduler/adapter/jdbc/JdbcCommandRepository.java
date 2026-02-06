@@ -31,7 +31,7 @@ public final class JdbcCommandRepository implements CommandRepository {
             tenant_id, command_id, idempotency_key, command_type,
             workflow_code, workflow_version, created_at, payload_json, status
           )
-          VALUES (?,?,?,?,?,?,?,?, 'NEW')
+          VALUES (?,?,?,?,?,?,?,?::jsonb, 'NEW')
           """,
           command.tenantId(),
           command.commandId(),

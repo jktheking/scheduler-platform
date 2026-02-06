@@ -62,11 +62,18 @@ public final class QuartzTriggerEngine implements TriggerEngine {
       if (!claimed.isEmpty()) metrics.triggerClaimed.add(claimed.size());
       for (JdbcTriggerRepository.TriggerRow tr : claimed) {
         try {
+          log.info("checkpoint=master.trigger_due_claimed triggerId={} workflowInstanceId={} dueTime={} claimedBy={}",
+              tr.triggerId(), tr.workflowInstanceId(), tr.dueTime(), claimedBy);
           dagRuntime.onTriggerDue(tr.workflowInstanceId(), tr.triggerId(), tr.dueTime(), "{}");
+          log.info("checkpoint=master.trigger_due_processed triggerId={} workflowInstanceId={} dueTime={}",
+              tr.triggerId(), tr.workflowInstanceId(), tr.dueTime());
           triggers.markDone(tr.triggerId());
+          log.info("checkpoint=master.trigger_mark_done triggerId={} workflowInstanceId={}", tr.triggerId(), tr.workflowInstanceId());
           metrics.triggerProcessed.add(1);
         } catch (Exception e) {
           triggers.markFailed(tr.triggerId(), e.toString());
+          log.error("checkpoint=master.trigger_mark_failed triggerId={} workflowInstanceId={} error={}",
+              tr.triggerId(), tr.workflowInstanceId(), e.toString());
           metrics.triggerError.add(1);
         }
       }

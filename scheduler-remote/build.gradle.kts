@@ -10,6 +10,7 @@ dependencies {
   api(libs.grpc.stub)
   runtimeOnly(libs.grpc.netty)
   api(libs.protobuf.java)
+   implementation(libs.slf4j.api)
 
   // Java 9+ no longer bundles javax.annotation.*; gRPC generated stubs still reference it.
   // Use compileOnly so it doesn't leak into consumers.

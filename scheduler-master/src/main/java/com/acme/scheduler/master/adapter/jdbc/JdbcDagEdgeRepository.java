@@ -30,7 +30,7 @@ public final class JdbcDagEdgeRepository {
   public Set<Long> incomingOf(long workflowCode, int workflowVersion, long taskCode) {
     var s = new LinkedHashSet<Long>();
     jdbc.query("""
-      SELECTSELECT from_task_code
+      SELECT from_task_code
       FROM t_workflow_dag_edge
       WHERE workflow_code=? AND workflow_version=? AND to_task_code=?
     """, (RowCallbackHandler) rs -> s.add(rs.getLong(1)),

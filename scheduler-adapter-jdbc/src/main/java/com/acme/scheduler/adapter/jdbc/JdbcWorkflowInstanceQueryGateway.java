@@ -22,7 +22,7 @@ public final class JdbcWorkflowInstanceQueryGateway implements WorkflowInstanceQ
   public Optional<WorkflowInstance> getInstance(long workflowInstanceId) {
     var rows = jdbc.query(
         """
-        SELECT workflow_instance_id, tenant_id, workflow_code, workflow_version, status, created_at, updated_at
+        SELECT workflow_instance_id, tenant_id, workflow_code, workflow_version, status, created_at, updated_at, schedule_time, last_error
         FROM t_workflow_instance
         WHERE workflow_instance_id=?
         """,
@@ -33,7 +33,9 @@ public final class JdbcWorkflowInstanceQueryGateway implements WorkflowInstanceQ
             rs.getInt(4),
             rs.getString(5),
             toInstant(rs.getTimestamp(6)),
-            toInstant(rs.getTimestamp(7))
+            toInstant(rs.getTimestamp(7)),
+            toInstant(rs.getTimestamp(8)),
+            rs.getString(9)
         ),
         workflowInstanceId);
     return rows.stream().findFirst();
@@ -67,6 +69,55 @@ public final class JdbcWorkflowInstanceQueryGateway implements WorkflowInstanceQ
             rs.getString(15)
         ),
         workflowInstanceId);
+  }
+
+
+  @Override
+  public List<TriggerRow> listRecentTriggers(long workflowInstanceId, int limit) {
+    return jdbc.query(
+        """
+        SELECT trigger_id, workflow_instance_id, due_time, status, claimed_by, claimed_at, updated_at, last_error
+        FROM t_trigger
+        WHERE workflow_instance_id=?
+        ORDER BY trigger_id DESC
+        LIMIT ?
+        """,
+        (rs, i) -> new TriggerRow(
+            rs.getLong(1),
+            rs.getLong(2),
+            toInstant(rs.getTimestamp(3)),
+            rs.getString(4),
+            rs.getString(5),
+            toInstant(rs.getTimestamp(6)),
+            toInstant(rs.getTimestamp(7)),
+            rs.getString(8)
+        ),
+        workflowInstanceId, limit);
+  }
+
+  @Override
+  public Optional<CommandRow> getLatestCommand(String tenantId, long workflowCode, int workflowVersion) {
+    var rows = jdbc.query(
+        """
+        SELECT command_id, tenant_id, idempotency_key, command_type, workflow_code, workflow_version, created_at, status, last_error_message
+        FROM t_command
+        WHERE tenant_id=? AND workflow_code=? AND workflow_version=?
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (rs, i) -> new CommandRow(
+            rs.getString(1),
+            rs.getString(2),
+            rs.getString(3),
+            rs.getString(4),
+            rs.getLong(5),
+            rs.getInt(6),
+            toInstant(rs.getTimestamp(7)),
+            rs.getString(8),
+            rs.getString(9)
+        ),
+        tenantId, workflowCode, workflowVersion);
+    return rows.stream().findFirst();
   }
 
   private static Instant toInstant(Timestamp ts) {

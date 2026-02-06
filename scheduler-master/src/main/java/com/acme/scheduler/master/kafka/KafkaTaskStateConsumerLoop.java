@@ -60,6 +60,8 @@ public final class KafkaTaskStateConsumerLoop implements Runnable {
         records.forEach(r -> {
           try {
             TaskStateEvent evt = mapper.readValue(r.value(), TaskStateEvent.class);
+            log.info("checkpoint=master.task_state_consumed workflowInstanceId={} taskInstanceId={} attempt={} state={} topic={} partition={} offset={}",
+                evt.workflowInstanceId(), evt.taskInstanceId(), evt.attempt(), evt.state(), r.topic(), r.partition(), r.offset());
             dagRuntime.onTaskState(evt);
           } catch (Exception e) {
             log.warn("Failed to parse TaskStateEvent: {}", e.toString());

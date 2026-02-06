@@ -3,14 +3,17 @@ package com.acme.scheduler.api.config;
 import com.acme.scheduler.adapter.jdbc.JdbcDlqGateway;
 import com.acme.scheduler.adapter.jdbc.JdbcWorkflowDefinitionGateway;
 import com.acme.scheduler.adapter.jdbc.JdbcWorkflowInstanceQueryGateway;
+import com.acme.scheduler.adapter.jdbc.JdbcWorkflowTrackingQueryGateway;
 import com.acme.scheduler.service.dlq.ListDlqUseCase;
 import com.acme.scheduler.service.dlq.ReplayDlqUseCase;
 import com.acme.scheduler.service.query.GetWorkflowInstanceUseCase;
+import com.acme.scheduler.service.query.GetWorkflowTrackingUseCase;
 import com.acme.scheduler.service.workflowdef.ListWorkflowDefinitionsUseCase;
 import com.acme.scheduler.service.workflowdef.UpsertWorkflowDefinitionUseCase;
 import com.acme.scheduler.service.port.DlqGateway;
 import com.acme.scheduler.service.port.WorkflowDefinitionGateway;
 import com.acme.scheduler.service.port.WorkflowInstanceQueryGateway;
+import com.acme.scheduler.service.port.WorkflowTrackingQueryGateway;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -26,6 +29,11 @@ public class WorkflowApiWiringConfig {
   @Bean
   public WorkflowInstanceQueryGateway workflowInstanceQueryGateway(JdbcTemplate jdbc) {
     return new JdbcWorkflowInstanceQueryGateway(jdbc);
+  }
+
+  @Bean
+  public WorkflowTrackingQueryGateway workflowTrackingQueryGateway(JdbcTemplate jdbc, WorkflowInstanceQueryGateway instanceGw) {
+    return new JdbcWorkflowTrackingQueryGateway(jdbc, instanceGw);
   }
 
   @Bean
@@ -46,6 +54,11 @@ public class WorkflowApiWiringConfig {
   @Bean
   public GetWorkflowInstanceUseCase getWorkflowInstanceUseCase(WorkflowInstanceQueryGateway gw) {
     return new GetWorkflowInstanceUseCase(gw);
+  }
+
+  @Bean
+  public GetWorkflowTrackingUseCase getWorkflowTrackingUseCase(WorkflowTrackingQueryGateway gw) {
+    return new GetWorkflowTrackingUseCase(gw);
   }
 
   @Bean

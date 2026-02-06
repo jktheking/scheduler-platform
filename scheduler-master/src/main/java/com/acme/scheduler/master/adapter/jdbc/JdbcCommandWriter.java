@@ -26,7 +26,7 @@ public final class JdbcCommandWriter {
       INSERT INTO t_command(
         command_id, tenant_id, idempotency_key, command_type, workflow_code, workflow_version, created_at, payload_json, status
       )
-      VALUES (?,?,?,?,?,?,?,?, 'NEW')
+      VALUES (?,?,?,?,?,?,?,?::jsonb, 'NEW')
       ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
     """,
         cmd.commandId(),

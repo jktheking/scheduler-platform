@@ -3,6 +3,7 @@ import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.withType
+import org.gradle.api.tasks.compile.JavaCompile
 
 plugins {
   alias(libs.plugins.spring.boot) apply false
@@ -35,6 +36,18 @@ subprojects {
   }
 
   plugins.withId("java") {
+    // Import Spring Boot BOM for consistent dependency versions in ALL Java modules
+    dependencies {
+      add(
+        "implementation",
+        platform("org.springframework.boot:spring-boot-dependencies:${libs.versions.springBoot.get()}")
+      )
+      add(
+        "testImplementation",
+        platform("org.springframework.boot:spring-boot-dependencies:${libs.versions.springBoot.get()}")
+      )
+    }
+
     extensions.configure<JavaPluginExtension> {
       toolchain {
         languageVersion.set(JavaLanguageVersion.of(libs.versions.java.get()))

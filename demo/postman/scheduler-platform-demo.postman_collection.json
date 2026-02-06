@@ -1,0 +1,359 @@
+{
+  "info": {
+    "name": "Scheduler Platform Demo",
+    "_postman_id": "b8e2d201-8a13-4ef2-9b10-6cf7a6c0d3c1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Local demo collection for Scheduler Platform.\n\nKey notes:\n1) Workflow Definition APIs require header: X-Tenant-Id.\n2) Start workflow execution is asynchronous: API returns after WAL ingestion. To query instance details, fetch the latest workflow_instance_id from Postgres:\n   SELECT id FROM t_workflow_instance ORDER BY id DESC LIMIT 1;\n   Then set collection variable workflowInstanceId.\n3) Use Kafka UI (http://localhost:8088) and Grafana (http://localhost:3000) for end-to-end verification.\n"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "projectCode",
+      "value": "1"
+    },
+    {
+      "key": "tenantId",
+      "value": "default"
+    },
+    {
+      "key": "workflowCode",
+      "value": "0"
+    },
+    {
+      "key": "workflowInstanceId",
+      "value": "0"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "API health",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Workflow Definitions",
+      "item": [
+        {
+          "name": "Create HTTP-only workflow definition",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflow-definitions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflow-definitions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"demo_http_only\",\n  \"workflowCode\": null,\n  \"taskDefinitionJson\": \"[{\\\"name\\\": \\\"HTTP_1\\\", \\\"taskType\\\": \\\"HTTP\\\", \\\"definition\\\": {\\\"method\\\": \\\"GET\\\", \\\"url\\\": \\\"https://postman-echo.com/get?hello=world\\\", \\\"timeoutMs\\\": 10000, \\\"headers\\\": {\\\"accept\\\": \\\"application/json\\\"}}}]\",\n  \"taskRelationJson\": \"[]\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "if (json && json.workflowCode) {",
+                  "  pm.collectionVariables.set('workflowCode', String(json.workflowCode));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Create DAG workflow definition (A fanout \u2192 D fanin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflow-definitions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflow-definitions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"demo_A_fanout_fanin_D\",\n  \"workflowCode\": null,\n  \"taskDefinitionJson\": \"[{\\\"name\\\": \\\"A\\\", \\\"taskType\\\": \\\"SCRIPT\\\", \\\"definition\\\": {\\\"inline\\\": \\\"#!/usr/bin/env bash\\\\necho A\\\\nexit 0\\\\n\\\", \\\"timeoutMs\\\": 60000, \\\"maxOutputBytes\\\": 16384}}, {\\\"name\\\": \\\"B\\\", \\\"taskType\\\": \\\"HTTP\\\", \\\"definition\\\": {\\\"method\\\": \\\"GET\\\", \\\"url\\\": \\\"https://postman-echo.com/get?from=B\\\", \\\"timeoutMs\\\": 10000, \\\"headers\\\": {\\\"accept\\\": \\\"application/json\\\"}}}, {\\\"name\\\": \\\"C\\\", \\\"taskType\\\": \\\"SCRIPT\\\", \\\"definition\\\": {\\\"inline\\\": \\\"#!/usr/bin/env bash\\\\necho C\\\\nexit 0\\\\n\\\", \\\"timeoutMs\\\": 60000, \\\"maxOutputBytes\\\": 16384}}, {\\\"name\\\": \\\"D\\\", \\\"taskType\\\": \\\"HTTP\\\", \\\"definition\\\": {\\\"method\\\": \\\"GET\\\", \\\"url\\\": \\\"https://postman-echo.com/get?from=D\\\", \\\"timeoutMs\\\": 10000, \\\"headers\\\": {\\\"accept\\\": \\\"application/json\\\"}}}]\",\n  \"taskRelationJson\": \"[{\\\"from\\\": \\\"A\\\", \\\"to\\\": \\\"B\\\"}, {\\\"from\\\": \\\"A\\\", \\\"to\\\": \\\"C\\\"}, {\\\"from\\\": \\\"B\\\", \\\"to\\\": \\\"D\\\"}, {\\\"from\\\": \\\"C\\\", \\\"to\\\": \\\"D\\\"}]\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "if (json && json.workflowCode) {",
+                  "  pm.collectionVariables.set('workflowCode', String(json.workflowCode));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Executions",
+      "item": [
+        {
+          "name": "Start workflow instance (ingestion \u2192 Kafka WAL)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{tenantId}}"
+              },
+              {
+                "key": "traceparent",
+                "value": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/projects/{{projectCode}}/workflow-instances",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "{{projectCode}}",
+                "workflow-instances"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"processDefinitionCode\": 0,\n  \"scheduleTime\": \"1970-01-01T00:00:00Z\",\n  \"execType\": \"START_PROCESS\",\n  \"failureStrategy\": \"END\",\n  \"warningType\": \"NONE\",\n  \"warningGroupId\": 0,\n  \"workerGroup\": \"default\",\n  \"environmentCode\": 0,\n  \"runMode\": \"RUN_PARALLEL\",\n  \"startNodeList\": \"[]\",\n  \"taskDependType\": \"TASK_ONLY\",\n  \"idempotencyKey\": \"demo-start-001\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Replace scheduleTime with current UTC time before sending",
+                  "const now = new Date().toISOString();",
+                  "const obj = JSON.parse(pm.request.body.raw);",
+                  "obj.scheduleTime = now;",
+                  "// Use workflowCode captured from the Create Definition calls if available",
+                  "const wf = pm.collectionVariables.get('workflowCode');",
+                  "if (wf) obj.processDefinitionCode = Number(wf);",
+                  "pm.request.body.update(JSON.stringify(obj, null, 2));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "// NOTE: response is asynchronous placeholder; fetch workflowInstanceId from Postgres and set collection variable workflowInstanceId"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Instances",
+      "item": [
+        {
+          "name": "Get workflow instance by id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflow-instances/{{workflowInstanceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflow-instances",
+                "{{workflowInstanceId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List tasks of workflow instance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflow-instances/{{workflowInstanceId}}/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflow-instances",
+                "{{workflowInstanceId}}",
+                "tasks"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Tracking (checkpoint view) of workflow instance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflow-instances/{{workflowInstanceId}}/tracking",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflow-instances",
+                "{{workflowInstanceId}}",
+                "tracking"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Observability (Prometheus HTTP API)",
+      "item": [
+        {
+          "name": "Prometheus - up",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:9090/api/v1/query?query=up",
+              "host": [
+                "http://localhost:9090"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "query"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "up"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Prometheus - ingestion rate (commands published)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:9090/api/v1/query?query=rate(scheduler_command_publish_total[1m])",
+              "host": [
+                "http://localhost:9090"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "query"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "rate(scheduler_command_publish_total[1m])"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

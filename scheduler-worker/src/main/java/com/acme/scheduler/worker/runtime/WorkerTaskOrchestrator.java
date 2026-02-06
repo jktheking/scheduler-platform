@@ -1,5 +1,13 @@
 package com.acme.scheduler.worker.runtime;
 
+import java.time.Instant;
+import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.acme.scheduler.common.runtime.TaskDispatchEnvelope;
 import com.acme.scheduler.common.runtime.TaskStateEvent;
 import com.acme.scheduler.meter.SchedulerMeter;
@@ -7,15 +15,6 @@ import com.acme.scheduler.worker.adapter.jdbc.JdbcTaskInstanceRepository;
 import com.acme.scheduler.worker.exec.HttpTaskExecutor;
 import com.acme.scheduler.worker.exec.ScriptTaskExecutor;
 import com.acme.scheduler.worker.kafka.KafkaTaskStatePublisher;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.time.Instant;
-import java.util.Objects;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public final class WorkerTaskOrchestrator {
 
@@ -62,53 +61,64 @@ public final class WorkerTaskOrchestrator {
     // after we have durably claimed this task in DB (at-least-once -> effectively-once).
     boolean claimed = repo.tryClaim(env.taskInstanceId(), env.attempt(), workerId);
     if (!claimed) {
+      log.info("checkpoint=worker.task_claim_skip workflowInstanceId={} taskInstanceId={} attempt={} workerId={} reason=already_claimed",
+          env.workflowInstanceId(), env.taskInstanceId(), env.attempt(), workerId);
       return true; // duplicate delivery / already claimed
     }
+    log.info("checkpoint=worker.task_claimed workflowInstanceId={} taskInstanceId={} attempt={} taskType={} workerId={} traceParent={}",
+        env.workflowInstanceId(), env.taskInstanceId(), env.attempt(), env.taskType(), workerId, env.traceParent());
     taskClaimed.add(1, "taskType", env.taskType());
 
     exec.execute(() -> runClaimed(env, workerId));
     return true;
   }
 
-  private void runClaimed(TaskDispatchEnvelope env, String workerId) {
+  private void runClaimed(TaskDispatchEnvelope taskDispatchEnvelope, String workerId) {
     Instant now = Instant.now();
-    long wi = env.workflowInstanceId();
-    long ti = env.taskInstanceId();
+    long wi = taskDispatchEnvelope.workflowInstanceId();
+    long ti = taskDispatchEnvelope.taskInstanceId();
 
     // queue delay: dueTime -> now
-    if (env.dueTime() != null) {
-      long qd = Math.max(0, now.toEpochMilli() - env.dueTime().toEpochMilli());
-      taskQueueDelayMs.record(qd, "taskType", env.taskType());
+    if (taskDispatchEnvelope.dueTime() != null) {
+      long qd = Math.max(0, now.toEpochMilli() - taskDispatchEnvelope.dueTime().toEpochMilli());
+      taskQueueDelayMs.record(qd, "taskType", taskDispatchEnvelope.taskType());
     }
-repo.markRunning(ti);
+    log.info("checkpoint=worker.task_running workflowInstanceId={} taskInstanceId={} attempt={} workerId={} traceParent={}",
+        wi, ti, taskDispatchEnvelope.attempt(), workerId, taskDispatchEnvelope.traceParent());
+    repo.markRunning(ti);
     Instant started = Instant.now();
-    taskStarted.add(1, "taskType", env.taskType());
-    statePublisher.publish(new TaskStateEvent(wi, ti, env.attempt(), "STARTED", started, null, null, null, null, env.traceParent()));
+    taskStarted.add(1, "taskType", taskDispatchEnvelope.taskType());
+    statePublisher.publish(new TaskStateEvent(wi, ti, taskDispatchEnvelope.attempt(), "STARTED", started, null, null, null, null, taskDispatchEnvelope.traceParent()));
+    log.info("checkpoint=worker.task_started workflowInstanceId={} taskInstanceId={} attempt={} taskType={} workerId={} startedAt={} traceParent={}",
+        wi, ti, taskDispatchEnvelope.attempt(), taskDispatchEnvelope.taskType(), workerId, started, taskDispatchEnvelope.traceParent());
 
     try {
       TaskExecutionResult res;
-      if ("HTTP".equalsIgnoreCase(env.taskType())) {
-        var r = http.execute(env.payloadJson());
+      if ("HTTP".equalsIgnoreCase(taskDispatchEnvelope.taskType())) {
+        var r = http.execute(taskDispatchEnvelope.payloadJson());
         res = new TaskExecutionResult(r.statusCode(), null);
-      } else if ("SCRIPT".equalsIgnoreCase(env.taskType())) {
-        var r = script.execute(env.payloadJson());
+      } else if ("SCRIPT".equalsIgnoreCase(taskDispatchEnvelope.taskType())) {
+        var r = script.execute(taskDispatchEnvelope.payloadJson());
         res = new TaskExecutionResult(null, r.exitCode());
       } else {
-        throw new IllegalArgumentException("Unsupported taskType " + env.taskType());
+        throw new IllegalArgumentException("Unsupported taskType " + taskDispatchEnvelope.taskType());
       }
 
       repo.markSuccess(ti);
       Instant finished = Instant.now();
-      taskRuntimeMs.record(Math.max(0, finished.toEpochMilli() - started.toEpochMilli()), "taskType", env.taskType());
-      taskSuccess.add(1, "taskType", env.taskType());
-      statePublisher.publish(new TaskStateEvent(wi, ti, env.attempt(), "SUCCEEDED", started, finished, res.httpStatus(), res.exitCode(), null, env.traceParent()));
+      taskRuntimeMs.record(Math.max(0, finished.toEpochMilli() - started.toEpochMilli()), "taskType", taskDispatchEnvelope.taskType());
+      taskSuccess.add(1, "taskType", taskDispatchEnvelope.taskType());
+      statePublisher.publish(new TaskStateEvent(wi, ti, taskDispatchEnvelope.attempt(), "SUCCEEDED", started, finished, res.httpStatus(), res.exitCode(), null, taskDispatchEnvelope.traceParent()));
+      log.info("checkpoint=worker.task_succeeded workflowInstanceId={} taskInstanceId={} attempt={} taskType={} workerId={} finishedAt={} httpStatus={} exitCode={} traceParent={}",
+          wi, ti, taskDispatchEnvelope.attempt(), taskDispatchEnvelope.taskType(), workerId, finished, res.httpStatus(), res.exitCode(), taskDispatchEnvelope.traceParent());
     } catch (Exception e) {
       repo.markFailure(ti, e.toString());
       Instant finished = Instant.now();
-      taskRuntimeMs.record(Math.max(0, finished.toEpochMilli() - started.toEpochMilli()), "taskType", env.taskType());
-      taskFail.add(1, "taskType", env.taskType());
-      statePublisher.publish(new TaskStateEvent(wi, ti, env.attempt(), "FAILED", started, finished, null, null, e.toString(), env.traceParent()));
-      log.warn("Task failed workflowInstanceId={} taskInstanceId={} attempt={} err={}", wi, ti, env.attempt(), e.toString());
+      taskRuntimeMs.record(Math.max(0, finished.toEpochMilli() - started.toEpochMilli()), "taskType", taskDispatchEnvelope.taskType());
+      taskFail.add(1, "taskType", taskDispatchEnvelope.taskType());
+      statePublisher.publish(new TaskStateEvent(wi, ti, taskDispatchEnvelope.attempt(), "FAILED", started, finished, null, null, e.toString(), taskDispatchEnvelope.traceParent()));
+      log.error("checkpoint=worker.task_failed workflowInstanceId={} taskInstanceId={} attempt={} taskType={} workerId={} finishedAt={} error={} traceParent={}",
+          wi, ti, taskDispatchEnvelope.attempt(), taskDispatchEnvelope.taskType(), workerId, finished, e.toString(), taskDispatchEnvelope.traceParent());
     }
   }
 

@@ -22,6 +22,7 @@ APP_COMPOSE="$DEMO_DIR/docker-compose.app.yml"
 
 BASE_URL="${BASE_URL:-http://localhost:8080}"
 PROJECT_CODE="${PROJECT_CODE:-1}"
+TENANT_ID="${TENANT_ID:-default}"
 
 HTTP_WORKFLOW_NAME="${HTTP_WORKFLOW_NAME:-demo_http_only}"
 SCRIPT_WORKFLOW_NAME="${SCRIPT_WORKFLOW_NAME:-demo_script_only}"
@@ -117,9 +118,7 @@ create_workflow_http () {
   echo "==> Creating HTTP workflow definition ($HTTP_WORKFLOW_NAME)"
   local payload
   payload="$(cat <<'JSON'
-{
-  "tenantId": "default",
-  "name": "__NAME__",
+{  "name": "__NAME__",
   "workflowCode": null,
   "taskDefinitionJson": "[{\"name\":\"HTTP_1\",\"taskType\":\"HTTP\",\"definition\":{\"method\":\"GET\",\"url\":\"https://postman-echo.com/get?hello=world\",\"timeoutMs\":10000,\"headers\":{\"accept\":\"application/json\"}}}]",
   "taskRelationJson": "[]"
@@ -128,7 +127,7 @@ JSON
 )"
   payload="${payload/__NAME__/$HTTP_WORKFLOW_NAME}"
   local resp
-  resp="$(curl -fsS -X POST "$BASE_URL/scheduler/workflow-definitions/create" -H "Content-Type: application/json" -d "$payload")"
+  resp="$(curl -fsS -X POST "$BASE_URL/api/v1/workflow-definitions" -H "Content-Type: application/json" -H "X-Tenant-Id: $TENANT_ID" -d "$payload")"
   echo "    Response: $resp"
   local code
   code="$(json_get "$resp" ".workflowCode")"
@@ -144,9 +143,7 @@ create_workflow_script () {
   # inline bash script is encoded with \n
   local payload
   payload="$(cat <<'JSON'
-{
-  "tenantId": "default",
-  "name": "__NAME__",
+{  "name": "__NAME__",
   "workflowCode": null,
   "taskDefinitionJson": "[{\"name\":\"SCRIPT_1\",\"taskType\":\"SCRIPT\",\"definition\":{\"inline\":\"#!/usr/bin/env bash\\necho 'hello from script'\\nexit 0\\n\",\"timeoutMs\":30000,\"maxOutputBytes\":16384,\"env\":{\"DEMO\":\"1\"}}}]",
   "taskRelationJson": "[]"
@@ -155,7 +152,7 @@ JSON
 )"
   payload="${payload/__NAME__/$SCRIPT_WORKFLOW_NAME}"
   local resp
-  resp="$(curl -fsS -X POST "$BASE_URL/scheduler/workflow-definitions/create" -H "Content-Type: application/json" -d "$payload")"
+  resp="$(curl -fsS -X POST "$BASE_URL/api/v1/workflow-definitions" -H "Content-Type: application/json" -H "X-Tenant-Id: $TENANT_ID" -d "$payload")"
   echo "    Response: $resp"
   local code
   code="$(json_get "$resp" ".workflowCode")"
@@ -192,7 +189,7 @@ start_instance () {
 JSON
 )"
   local resp
-  resp="$(curl -fsS -X POST "$BASE_URL/scheduler/projects/$PROJECT_CODE/executors/start-process-instance" \
+  resp="$(curl -fsS -X POST "$BASE_URL/api/v1/projects/$PROJECT_CODE/workflow-instances" \
     -H "Content-Type: application/json" \
     -H "traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" \
     -d "$payload")"

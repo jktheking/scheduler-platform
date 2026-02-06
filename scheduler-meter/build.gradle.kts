@@ -5,4 +5,5 @@ dependencies {
  api(libs.otel.sdk)
  api(libs.otel.sdk.trace)
  api(libs.otel.exporter.otlp)
+  implementation(libs.slf4j.api)
 }

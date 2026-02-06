@@ -11,6 +11,7 @@ import com.acme.scheduler.master.trigger.TriggerEngine;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
@@ -200,15 +201,49 @@ public class MasterKafkaWiringConfig {
   @Bean
   @ConditionalOnProperty(prefix = "scheduler.master", name = "role", havingValue = "WRITER")
   public KafkaCommandWriterLoop kafkaCommandWriterLoop(MasterKafkaProperties props,
+		                                               @Qualifier("writerConsumer") 
                                                        KafkaConsumer<String, byte[]> writerConsumer,
+                                                       @Qualifier("jdbcCommandWriter")
                                                        JdbcCommandWriter writer,
                                                        ObjectMapper mapper,
                                                        MasterMetrics metrics) {
     return new KafkaCommandWriterLoop(props, writerConsumer, writer, mapper, metrics);
   }
+  
+  
+
 
   // ---------- MASTER role: Kafka -> plan/instance/trigger materialization
+  
+  
+  //raw-command materialization in database;  Reads scheduler.commands.v1 and persists to Postgres t_command with ON CONFLICT DO NOTHING.
+  @Bean
+  @ConditionalOnProperty(prefix = "scheduler.master", name = "role", havingValue = "MASTER")
+  public KafkaConsumer<String, byte[]> masterWriterConsumer(MasterKafkaProperties props) {
+    return new KafkaConsumer<>(KafkaClientFactory.consumerProps(props, props.getKafka().getWriterGroupId()));
+  }
 
+  @Bean
+  @ConditionalOnProperty(prefix = "scheduler.master", name = "role", havingValue = "MASTER")
+  public JdbcCommandWriter masterJdbcCommandWriter(JdbcTemplate jdbc) {
+    return new JdbcCommandWriter(jdbc);
+  }
+
+  
+  @Bean
+  @ConditionalOnProperty(prefix = "scheduler.master", name = "role", havingValue = "MASTER")
+  public KafkaCommandWriterLoop masterKafkaCommandWriterLoop(MasterKafkaProperties props,
+		                                               @Qualifier("masterWriterConsumer")
+                                                       KafkaConsumer<String, byte[]> writerConsumer,
+                                                       @Qualifier("masterJdbcCommandWriter")
+                                                       JdbcCommandWriter writer,
+                                                       ObjectMapper mapper,
+                                                       MasterMetrics metrics) {
+    return new KafkaCommandWriterLoop(props, writerConsumer, writer, mapper, metrics);
+  }
+  
+
+  // Reads scheduler.commands.v1 and materializes workflow instances/plans/triggers in DB.
   @Bean
   @ConditionalOnProperty(prefix = "scheduler.master", name = "role", havingValue = "MASTER", matchIfMissing = true)
   public KafkaConsumer<String, byte[]> masterConsumer(MasterKafkaProperties props) {
@@ -224,6 +259,7 @@ public class MasterKafkaWiringConfig {
   @Bean
   @ConditionalOnProperty(prefix = "scheduler.master", name = "role", havingValue = "MASTER", matchIfMissing = true)
   public KafkaMasterCommandConsumerLoop kafkaMasterCommandConsumerLoop(MasterKafkaProperties props,
+		                                                               @Qualifier("masterConsumer")
                                                                        KafkaConsumer<String, byte[]> masterConsumer,
                                                                        JdbcCommandDedupeRepository dedupe,
                                                                        WorkflowScheduler workflowScheduler,

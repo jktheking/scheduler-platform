@@ -59,15 +59,18 @@ public final class JdbcWorkflowScheduler implements WorkflowScheduler {
       try {
         return java.util.Optional.of(Instant.parse(st));
       } catch (DateTimeParseException dtpe) {
+    	  
         // Accept epoch millis as a fallback
         try {
           long ms = Long.parseLong(st);
           return java.util.Optional.of(Instant.ofEpochMilli(ms));
         } catch (Exception ignored) {
+        	
           return java.util.Optional.empty();
         }
       }
     } catch (Exception e) {
+    	
       return java.util.Optional.empty();
     }
   }

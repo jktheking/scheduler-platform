@@ -1,6 +1,7 @@
 plugins { `java-library` }
 
-dependencies {
+dependencies{ 
+ implementation(libs.slf4j.api)
  api(project(":scheduler-common"))
 
  testImplementation(platform(libs.junit.bom))

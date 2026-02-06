@@ -93,12 +93,16 @@ public final class KafkaMasterCommandConsumerLoop implements SmartLifecycle {
           CommandEnvelope cmd = mapper.readValue(rec.value(), CommandEnvelope.class);
 
           metrics.commandKafkaConsumed.add(1);
+          log.info("checkpoint=master.command_consumed tenantId={} commandId={} workflowCode={} workflowVersion={} topic={} partition={} offset={}",
+              cmd.tenantId(), cmd.commandId(), cmd.workflowCode(), cmd.workflowVersion(), rec.topic(), rec.partition(), rec.offset());
 
           // Dedupe at master boundary for at-least-once Kafka delivery
           boolean first = dedupe.tryMarkProcessing(cmd.commandId());
           if (!first) {
+            log.info("checkpoint=master.command_dedupe_skip commandId={} topic={} partition={} offset={}", cmd.commandId(), rec.topic(), rec.partition(), rec.offset());
             continue;
           }
+          log.info("checkpoint=master.command_dedupe_accept commandId={}", cmd.commandId());
 
           try {
             long workflowInstanceId = workflowScheduler.createAndSchedule(
@@ -108,11 +112,14 @@ public final class KafkaMasterCommandConsumerLoop implements SmartLifecycle {
                 cmd.payloadJson()
             );
             metrics.workflowScheduled.add(1);
+            log.info("checkpoint=master.workflow_scheduled tenantId={} commandId={} workflowInstanceId={} workflowCode={} workflowVersion={}",
+                cmd.tenantId(), cmd.commandId(), workflowInstanceId, cmd.workflowCode(), cmd.workflowVersion());
             dedupe.markOutcome(cmd.commandId(), "DONE", "workflowInstanceId=" + workflowInstanceId);
           } catch (Exception ex) {
             metrics.commandKafkaError.add(1);
             dedupe.markOutcome(cmd.commandId(), "FAILED", ex.getMessage());
-            log.warn("Master command {} failed: {}", cmd.commandId(), ex.toString());
+            log.error("checkpoint=master.command_failed commandId={} tenantId={} workflowCode={} workflowVersion={} error={}",
+                cmd.commandId(), cmd.tenantId(), cmd.workflowCode(), cmd.workflowVersion(), ex.toString());
           }
         }
         consumer.commitSync();
