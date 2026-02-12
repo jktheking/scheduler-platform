@@ -46,6 +46,14 @@ subprojects {
         "testImplementation",
         platform("org.springframework.boot:spring-boot-dependencies:${libs.versions.springBoot.get()}")
       )
+      
+      // Provide a consistent, Spring-managed test stack (JUnit Jupiter + Mockito + AssertJ + Spring Test, etc.)
+      add("testImplementation", "org.springframework.boot:spring-boot-starter-test")
+
+      // Gradle 9+ needs the JUnit Platform launcher on the *runtime* classpath when using useJUnitPlatform().
+      // Some setups do not pull this transitively, so keep it explicit to avoid
+      // "Failed to load JUnit Platform launcher" errors.
+      add("testRuntimeOnly", "org.junit.platform:junit-platform-launcher")
      
      add("implementation", enforcedPlatform(libs.grpc.bom))
      add("testImplementation", enforcedPlatform(libs.grpc.bom))

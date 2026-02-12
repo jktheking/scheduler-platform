@@ -7,5 +7,7 @@ dependencies {
  api(project(":scheduler-domain"))
  api(libs.jackson.databind)
  implementation(libs.slf4j.api)
+ 
+ testImplementation("org.springframework.boot:spring-boot-starter-test")
 
 }

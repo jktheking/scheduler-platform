@@ -16,7 +16,6 @@ postgresql = "42.7.4"
 kafka = "3.7.1"
 
 jackson = "2.18.2"
-junit = "5.11.4"
 
 [libraries]
 # ---- Spring Boot ----
@@ -60,10 +59,6 @@ otel-sdk = { module = "io.opentelemetry:opentelemetry-sdk", version.ref = "otel"
 otel-sdk-trace = { module = "io.opentelemetry:opentelemetry-sdk-trace", version.ref = "otel" }
 otel-exporter-otlp = { module = "io.opentelemetry:opentelemetry-exporter-otlp", version.ref = "otel" }
 
-# ---- Testing ----
-junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
-junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
-junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "springBoot" }

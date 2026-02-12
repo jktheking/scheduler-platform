@@ -25,6 +25,13 @@ dependencies {
 
  implementation(libs.springdoc.openapi.ui)
  runtimeOnly(libs.postgresql)
+ 
+  // Testing (versions managed via Spring Boot BOM).
+  testImplementation("org.springframework.boot:spring-boot-starter-test")
+  // Explicitly include Boot's test support artifacts used by @WebMvcTest/@MockBean
+  // to avoid missing-class issues if a build/customization prunes transitive deps.
+  testImplementation("org.springframework.boot:spring-boot-test")
+  testImplementation("org.springframework.boot:spring-boot-test-autoconfigure")
 
 }
 
