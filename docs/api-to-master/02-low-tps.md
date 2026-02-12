@@ -1,29 +1,34 @@
-# Scheduler Platform — Command Ingestion (Low TPS)
+# Sequence — Low TPS Mode (DB-Poll Command Queue)
 
-This sequence diagram shows the **low TPS ingestion path** using
-direct JDBC persistence into Postgres.
+This project supports a low-TPS path where commands are written into Postgres and
+the master polls and claims them.
 
 ```mermaid
 sequenceDiagram
   autonumber
 
-  participant UI as Client
-  participant API as SchedulerAPI
-  participant UC as StartWorkflowUseCase
-  participant ADM as AdmissionStack
-  participant GW as JdbcIngestionGateway
-  participant REPO as JdbcCommandRepository
-  participant DB as Postgres
+  participant C as Client
+  participant API as scheduler-api
+  participant DB as Postgres (t_command)
+  participant MS as MasterSchedulerLoop
+  participant DD as t_command_dedupe
+  participant OR as Orchestrator (create instance/trigger)
 
-  UI->>API: POST start-process-instance
-  API->>UC: execute request
-  UC->>ADM: admit CommandEnvelope
-  ADM-->>UC: ALLOW
-  UC->>GW: ingest CommandEnvelope
-  GW->>REPO: insertIfAbsent command
-  REPO->>DB: insert into t_command
-  DB-->>REPO: ok or duplicate
-  REPO-->>GW: insert result
-  GW-->>UC: accepted result
-  UC-->>API: commandId accepted
-  API-->>UI: HTTP 200 OK
+  C->>API: POST /workflow-instances
+  API->>DB: INSERT t_command (idempotent)
+  DB-->>API: ok
+  API-->>C: 202 SUBMITTED
+
+  loop poll interval
+    MS->>DB: claimBatch(FOR UPDATE SKIP LOCKED)
+    DB-->>MS: commands[]
+    MS->>DD: tryMarkProcessing(commandId)
+    alt duplicate
+      DD-->>MS: false
+    else first time
+      DD-->>MS: true
+      MS->>OR: apply START_PROCESS
+      OR->>DB: create t_workflow_instance / t_workflow_plan / t_trigger
+    end
+  end
+```

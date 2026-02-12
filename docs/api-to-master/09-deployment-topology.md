@@ -1,45 +1,39 @@
-## `09-deployment-topology-phase-b-c.md`
-
-#### Deployment Topology — PHASE B + PHASE C (Local / Docker Compose)
-
-This doc shows the PHASE B + C topology:
-
-- `scheduler-api` (REST ingestion)
-- `scheduler-master` in two roles:
-  - WRITER (Kafka WAL -> DB)
-  - MASTER (Kafka orchestration + TriggerEngine + Ready publish)
-- Postgres
-- Kafka
-- Optional telemetry stack
-
-## 1) Topology diagram
+# Deployment Topology — Local Docker Demo
 
 ```mermaid
 flowchart TB
-  subgraph Net
-    API[scheduler-api<br/>REST 8080]
-    MW[scheduler-master writer<br/>consumer-group scheduler-command-writer]
-    MM[scheduler-master master<br/>consumer-group scheduler-master]
-    PG[(Postgres 5432)]
-    K[(Kafka 9092)]
-    OTEL[OTel Collector<br/>4317 4318]
-    PROM[Prometheus<br/>9090]
-    GRAF[Grafana<br/>3000]
+  subgraph App
+    API[scheduler-api :8080]
+    M[scheduler-master]
+    W[scheduler-worker]
+    AS[scheduler-alert-server]
   end
 
-  API -->|JDBC mode| PG
-  API -->|Kafka WAL mode| K
+  subgraph Infra
+    PG[(Postgres :5432)]
+    K[(Kafka :9092)]
+    OT[OTel Collector :4317/:4318]
+    PR[(Prometheus :9090)]
+    G[Grafana :3000]
+  end
 
-  K -->|consume commands| MW
-  MW -->|persist t_command| PG
+  API --> PG
+  M --> PG
+  W --> PG
 
-  K -->|consume commands| MM
-  MM -->|dedupe instance plan triggers| PG
+  API --> K
+  M --> K
+  W --> K
+  AS --> K
 
-  MM -->|publish ready events| K
+  API --> OT
+  M --> OT
+  W --> OT
+  AS --> OT
 
-  API -.-> OTEL
-  MW  -.-> OTEL
-  MM  -.-> OTEL
-  OTEL -.-> PROM
-  PROM -.-> GRAF 
+  PR --> API
+  PR --> M
+  PR --> W
+  PR --> AS
+  G --> PR
+```

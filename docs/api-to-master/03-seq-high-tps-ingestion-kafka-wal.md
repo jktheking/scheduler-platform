@@ -1,42 +1,43 @@
-# Sequence Diagram — High TPS Ingestion (Kafka WAL + Writer Group)
+# Sequence Diagram — High TPS Ingestion (Kafka WAL + DB Command Writer)
 
-This sequence diagram shows the **high TPS ingestion path** where `scheduler-api`
-writes the command to Kafka as a **WAL** (`scheduler.commands.v1`), and a separate
-**writer consumer group** persists the command into Postgres (`t_command`).
+This is the **ingestion path** when `SCHEDULER_INGESTION_MODE=KAFKA`.
+
+- `scheduler-api` publishes `CommandEnvelope` to Kafka WAL topic `scheduler.commands.v1`.
+- `KafkaCommandWriterLoop` (writer consumer group) persists the raw command to Postgres `t_command`
+  via `insertIfAbsent` (idempotent).
 
 ```mermaid
 sequenceDiagram
   autonumber
 
-  participant UI as Client
-  participant API as SchedulerAPI
+  participant C as Client
+  participant API as scheduler-api
   participant UC as StartWorkflowUseCase
-  participant ADM as AdmissionStack
-  participant KGW as KafkaWalIngestionGateway
-  participant KBUS as KafkaCommandBus
-  participant K as KafkaCommandsTopic
-  participant WR as MasterWriter
-  participant DB as Postgres
+  participant AC as AdmissionController
+  participant CB as MeteredCommandBus
+  participant K as Kafka (scheduler.commands.v1)
+  participant WR as KafkaCommandWriterLoop
+  participant DB as Postgres (t_command)
 
-  UI->>API: POST start-process-instance
-  API->>UC: execute request
-  UC->>ADM: admit CommandEnvelope
+  C->>API: POST /workflow-instances (start)
+  API->>UC: execute(request)
+  UC->>AC: decide(tenant, "workflow.start")
+  alt rejected
+    AC-->>UC: REJECT
+    UC-->>API: 429 Too Many Requests
+    API-->>C: rejected
+  else accepted
+    AC-->>UC: ACCEPT
+    UC->>CB: publish(CommandEnvelope)
+    CB->>K: produce(CommandEnvelope)
+    K-->>CB: ack
+    CB-->>UC: ok
+    UC-->>API: SUBMITTED
+    API-->>C: 202 SUBMITTED
+  end
 
-  Note over ADM: TokenBucket<br/>InflightLimiter<br/>CircuitBreaker<br/>KafkaPressureSampler<br/>KafkaAwareAdmissionController
-
-  ADM-->>UC: ALLOW
-  UC->>KGW: ingest CommandEnvelope
-  KGW->>KBUS: publish CommandEnvelope
-  KBUS->>K: produce command to scheduler.commands.v1
-  K-->>KBUS: ack
-  KBUS-->>KGW: ok
-  KGW-->>UC: accepted
-  UC-->>API: accepted WAL
-  API-->>UI: HTTP 200 OK
-
-  Note over WR,K: Writer consumer group persists WAL to DB
-
-  WR->>K: poll scheduler.commands.v1
+  WR->>K: poll()
   K-->>WR: CommandEnvelope
-  WR->>DB: insert into t_command (idempotent)
-  DB-->>WR: ok or duplicate
+  WR->>DB: insertIfAbsent(command_id, payload_json, ...)
+  DB-->>WR: ok (or conflict no-op)
+```

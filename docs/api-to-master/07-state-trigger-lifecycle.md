@@ -1,17 +1,26 @@
+# State Diagram — Trigger Lifecycle (`t_trigger.status`)
 
+Triggers are **DB-owned** scheduling primitives. The master claims them with
+`FOR UPDATE SKIP LOCKED` and executes the corresponding wakeup.
 
-## `07-state-trigger-lifecycle.md`
-
-# State Diagram — Trigger Lifecycle (DB only for triggers)
-
-DB holds triggers only. Ready queue is Kafka.
+Key behaviors:
+- Triggers are inserted as `DUE`.
+- Loader may mark upcoming triggers `ENQUEUED` when placed into the in-memory wheel.
+- Claimer marks triggers `PROCESSING`.
+- Trigger is terminal as `DONE` or `FAILED` (with `last_error`).
 
 ```mermaid
 stateDiagram-v2
   [*] --> DUE
-  DUE --> ENQUEUED: claimed with skip locked
-  ENQUEUED --> PROCESSING: publish ready started
-  PROCESSING --> DONE: publish ack and mark done
-  PROCESSING --> FAILED: publish failed or exception
-  FAILED --> DUE: retry policy future enhancement
+
+  DUE --> ENQUEUED: loader places in wheel (optional)
+  DUE --> PROCESSING: claimed directly (SKIP LOCKED)
+
+  ENQUEUED --> PROCESSING: claimed (SKIP LOCKED)
+
+  PROCESSING --> DONE: handler ok
+  PROCESSING --> FAILED: handler exception
+
   DONE --> [*]
+  FAILED --> [*]
+```

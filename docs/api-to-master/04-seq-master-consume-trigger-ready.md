@@ -1,50 +1,64 @@
-## `04-seq-master-consume-trigger-ready.md`
+# Sequence Diagram — Master Consume → Materialize → Trigger → READY
 
+This is the **master-side path** after a command is already in Kafka WAL (`scheduler.commands.v1`).
 
-#### Sequence Diagram — Master Consumption + Trigger Scheduling + Ready Publish
-
-This sequence diagram shows how `scheduler-master` (master consumer group) consumes
-commands, performs **dedupe**, materializes **instance/plan/trigger**, and how the
-**trigger engine** publishes ready events to Kafka (`scheduler.tasks.ready.v1`).
+- **KafkaMasterCommandConsumerLoop** applies commands (leader/shard gated) and materializes:
+  - `t_command_dedupe`
+  - `t_workflow_instance`
+  - `t_workflow_plan`
+  - initial `t_trigger` (DAG wake)
+- **TimeWheelTriggerEngine** claims due triggers (`FOR UPDATE SKIP LOCKED`) and calls DAG runtime.
+- DAG runtime queues eligible tasks in DB and **publishes dispatch envelopes** to `scheduler.tasks.ready.v1`.
 
 ```mermaid
 sequenceDiagram
   autonumber
 
-  participant K as KafkaCommandsTopic
-  participant MC as MasterConsumer
-  participant DP as DedupeRepo
-  participant WI as WorkflowInstanceRepo
-  participant PL as WorkflowPlanRepo
-  participant TR as TriggerRepo
-  participant ENG as TriggerEngine
-  participant RP as ReadyPublisher
-  participant KT as KafkaReadyTopic
+  participant K as Kafka (scheduler.commands.v1)
+  participant MC as KafkaMasterCommandConsumerLoop
+  participant DD as JdbcCommandDedupeRepository
+  participant WS as JdbcWorkflowScheduler
+  participant WI as JdbcWorkflowInstanceRepository
+  participant PL as JdbcWorkflowPlanRepository
+  participant TR as JdbcTriggerRepository
 
-  MC->>K: poll commands
+  participant TE as TimeWheelTriggerEngine
+  participant DR as DefaultDagRuntime
+  participant TI as JdbcTaskInstanceRepository
+  participant RP as KafkaReadyPublisher
+  participant KR as Kafka (scheduler.tasks.ready.v1)
+
+  MC->>K: poll()
   K-->>MC: CommandEnvelope
 
-  MC->>DP: markProcessedIfAbsent commandId
-
-  alt duplicate command
-    DP-->>MC: false
-    MC-->>K: commit offset
+  MC->>DD: tryMarkProcessing(commandId)
+  alt duplicate delivery
+    DD-->>MC: false
+    MC-->>K: commit offset (safe no-op)
   else first time
-    DP-->>MC: true
-    MC->>WI: createWorkflowInstance
-    WI-->>MC: workflowInstanceId
-    MC->>PL: persistPlan workflowInstanceId
-    PL-->>MC: ok
-    MC->>TR: insertTrigger dueTime status DUE
-    TR-->>MC: ok
+    DD-->>MC: true
+    MC->>WS: createAndSchedule(command)
+    WS->>WI: insert workflow_instance (status=TRIGGERED)
+    WI-->>WS: workflow_instance_id
+    WS->>PL: upsert plan_json
+    PL-->>WS: ok
+    WS->>TR: insert trigger (type=DAG_WAKE, status=DUE, due_time=schedule_time)
+    TR-->>WS: ok
+    WS-->>MC: ok
+    MC->>DD: markOutcome(DONE)
     MC-->>K: commit offset
   end
 
-  loop trigger engine tick or poll
-    ENG->>TR: claimDueTriggers for update skip locked
-    TR-->>ENG: triggers
-    ENG->>RP: publish TaskReadyEvent
-    RP->>KT: produce scheduler.tasks.ready.v1
-    KT-->>RP: ack
-    ENG->>TR: mark trigger DONE
+  loop trigger tick / drain
+    TE->>TR: claimDue(shard, now) (FOR UPDATE SKIP LOCKED)
+    TR-->>TE: triggers[]
+    TE->>DR: onTriggerDue(trigger)
+    DR->>TI: queue roots + due retries (PENDING/RETRY_WAIT -> QUEUED)
+    TI-->>DR: queued tasks
+    DR->>RP: publish TaskDispatchEnvelope(s)
+    RP->>KR: produce()
+    KR-->>RP: ack
+    DR-->>TE: ok
+    TE->>TR: markTerminal(DONE/FAILED)
   end
+```
