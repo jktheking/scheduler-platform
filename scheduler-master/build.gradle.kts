@@ -24,7 +24,7 @@ dependencies {
 
  // Optional (disabled by default): ETCD leader election for MASTER role HA.
  // Keeping it as a normal dependency ensures compilation in offline environments.
- implementation("io.etcd:jetcd-core:0.7.7")
+implementation(libs.jetcd.core)
 
  // OTel API comes transitively from :scheduler-meter
 

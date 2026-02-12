@@ -133,14 +133,14 @@ docker compose --profile ha -f demo/docker-compose.infra.yml up -d
       SCHEDULER_MASTER_SHARDING_SHARDS: "2"
       
       # Must be unique per replica
-      SCHEDULER_MASTER_SHARDING_NODEID: "${HOSTNAME:-scheduler-master-ha}"
+      SCHEDULER_MASTER_SHARDING_NODE_ID: "${HOSTNAME:-scheduler-master-ha}"
      
       # Etcd coordination
-      SCHEDULER_MASTER_SHARDING_ELECTIONBASEPATH: "/scheduler/master/shards"
+      SCHEDULER_MASTER_SHARDING_ELECTION_BASE_PATH: "/scheduler/master/shards"
      
       # Duration string for java.time.Duration (Spring Boot binder)
-      SCHEDULER_MASTER_SHARDING_LEASETTL: "10s"
-      SCHEDULER_MASTER_SHARDING_ETCDENDPOINTS: "http://etcd:2379"
+      SCHEDULER_MASTER_SHARDING_LEASE_TTL: "10s"
+      SCHEDULER_MASTER_SHARDING_ETCD_ENDPOINTS: "http://etcd:2379"
 ```
 
 3) Scale masters:

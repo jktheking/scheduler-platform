@@ -46,6 +46,10 @@ subprojects {
         "testImplementation",
         platform("org.springframework.boot:spring-boot-dependencies:${libs.versions.springBoot.get()}")
       )
+     
+     add("implementation", enforcedPlatform(libs.grpc.bom))
+     add("testImplementation", enforcedPlatform(libs.grpc.bom))
+    
     }
 
     extensions.configure<JavaPluginExtension> {
