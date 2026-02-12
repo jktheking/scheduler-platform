@@ -8,6 +8,7 @@ import com.acme.scheduler.service.dlq.ListDlqUseCase;
 import com.acme.scheduler.service.dlq.ReplayDlqUseCase;
 import com.acme.scheduler.service.query.GetWorkflowInstanceUseCase;
 import com.acme.scheduler.service.query.GetWorkflowTrackingUseCase;
+import com.acme.scheduler.service.port.CommandIngestionGateway;
 import com.acme.scheduler.service.workflowdef.ListWorkflowDefinitionsUseCase;
 import com.acme.scheduler.service.workflowdef.UpsertWorkflowDefinitionUseCase;
 import com.acme.scheduler.service.port.DlqGateway;
@@ -67,7 +68,7 @@ public class WorkflowApiWiringConfig {
   }
 
   @Bean
-  public ReplayDlqUseCase replayDlqUseCase(DlqGateway gw) {
-    return new ReplayDlqUseCase(gw);
+  public ReplayDlqUseCase replayDlqUseCase(CommandIngestionGateway gateway) {
+    return new ReplayDlqUseCase(gateway);
   }
 }

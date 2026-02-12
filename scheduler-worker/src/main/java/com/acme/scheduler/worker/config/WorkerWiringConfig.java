@@ -2,9 +2,11 @@ package com.acme.scheduler.worker.config;
 
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerConfig;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.acme.scheduler.meter.OtelSchedulerMeter;
@@ -14,8 +16,8 @@ import com.acme.scheduler.worker.exec.HttpTaskExecutor;
 import com.acme.scheduler.worker.exec.ScriptTaskExecutor;
 import com.acme.scheduler.worker.kafka.KafkaReadyTaskConsumerLoop;
 import com.acme.scheduler.worker.kafka.KafkaTaskStatePublisher;
+import com.acme.scheduler.worker.kafka.ShardKeyPartitioner;
 import com.acme.scheduler.worker.kafka.WorkerKafkaClientFactory;
-import com.acme.scheduler.worker.kafka.WorkerKafkaProperties;
 import com.acme.scheduler.worker.runtime.WorkerTaskOrchestrator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -23,6 +25,7 @@ import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.metrics.Meter;
 
 @Configuration
+@EnableConfigurationProperties(WorkerShardingProperties.class)
 public class WorkerWiringConfig {
 
   @Bean
@@ -42,8 +45,13 @@ public class WorkerWiringConfig {
   }
 
   @Bean
-  public KafkaProducer<String, byte[]> stateProducer(WorkerKafkaProperties props) {
-    return new KafkaProducer<>(WorkerKafkaClientFactory.producerProps(props));
+  public KafkaProducer<String, byte[]> stateProducer(WorkerKafkaProperties props, WorkerShardingProperties sharding) {
+    var p = WorkerKafkaClientFactory.producerProps(props);
+    if (sharding.isEnabled()) {
+      p.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, ShardKeyPartitioner.class.getName());
+      p.put(ShardKeyPartitioner.CONF_SHARDS, Integer.toString(Math.max(1, sharding.getShards())));
+    }
+    return new KafkaProducer<>(p);
   }
 
   @Bean

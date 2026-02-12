@@ -36,3 +36,9 @@ scheduler:
       wheelTickMs: 100
       wheelSlots: 512
       wheelLookaheadMs: 30000
+
+logging:
+  level:
+    org.springframework.jdbc.core: ERROR
+    org.springframework.jdbc.support: ERROR
+    org.springframework.jdbc.support.SQLErrorCodeSQLExceptionTranslator: ERROR

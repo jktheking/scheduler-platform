@@ -15,6 +15,7 @@ The API follows REST-style paths under **`/api/v1`** and uses **tenant routing v
 - [Prerequisites](#prerequisites)
 - [Services and ports](#services-and-ports)
 - [Bring everything up](#bring-everything-up)
+- [Optional master HA](#optional-master-ha)
 - [Demo walkthrough](#demo-walkthrough)
 - [Validate via Postgres](#validate-via-postgres)
 - [Validate via Kafka UI and Kafka CLI](#validate-via-kafka-ui-and-kafka-cli)
@@ -42,15 +43,21 @@ The API follows REST-style paths under **`/api/v1`** and uses **tenant routing v
 
 ### Infra + Observability (docker-compose.infra.yml)
 
-| Service | Container | Host URL / Port | Purpose | Credentials / Notes |
-|---|---|---:|---|---|
+
 | Postgres 16 | `scheduler-postgres` | `localhost:5432` | Metadata store | DB=`scheduler`, user=`scheduler`, pass=`scheduler` |
+
 | pgAdmin | `scheduler-pgadmin` | http://localhost:5050 | Postgres UI | login=`admin@scheduler.com`, pass=`admin` |
+
 | Kafka (KRaft) | `scheduler-kafka` | `localhost:9092` | WAL + ready + state topics | Internal docker listener: `kafka:29092` |
+
 | Kafka UI | `scheduler-kafka-ui` | http://localhost:8088 | Browse topics/messages/groups | Cluster `local` preconfigured |
+
 | Flyway | `scheduler-flyway` | (no UI) | Runs DB migrations at startup | Check logs: `docker logs -f scheduler-flyway` |
+
 | OTel Collector | `scheduler-otel-collector` | `localhost:4317` / `localhost:4318` | OTLP ingest (traces/metrics) | Exposes Prometheus exporter for Prometheus scrape |
+
 | Prometheus | `scheduler-prometheus` | http://localhost:9090 | Metrics store/query | `Status → Targets` should show OTel collector |
+
 | Grafana | `scheduler-grafana` | http://localhost:3000 | Dashboards | login=`admin`, pass=`admin` |
 
 ### Application (docker-compose.app.yml)
@@ -60,6 +67,7 @@ The API follows REST-style paths under **`/api/v1`** and uses **tenant routing v
 | Scheduler API | `scheduler-api` | http://localhost:8080 | REST ingestion + defs + query |
 | Scheduler Master | `scheduler-master` | (no host port) | Consumes WAL; schedules triggers; owns DAG runtime; publishes ready tasks; consumes task state |
 | Scheduler Worker | `scheduler-worker` | (no host port) | Consumes ready tasks; executes HTTP/SCRIPT; publishes task state |
+| Scheduler Alert Server | `scheduler-alert-server` | http://localhost:8090 | Consumes scheduler.alerts.v1 and dispatches alerts (logs; optional webhook) |
 
 API entry points:
 - Swagger UI: http://localhost:8080/swagger-ui/index.html
@@ -75,11 +83,15 @@ From repository root:
 # 1) Infra
 docker compose -f demo/docker-compose.infra.yml up -d
 
+
 # Wait for Flyway to complete
 docker logs -f scheduler-flyway
 
 # 2) App (build + run)
-docker compose -f demo/docker-compose.app.yml up -d --build
+docker compose -f demo/docker-compose.app.yml --profile single up -d --build
+
+# Alert server consumes scheduler.alerts.v1
+  docker logs -f scheduler-alert-server
 ```
 
 Verify containers:
@@ -97,6 +109,47 @@ docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 ```bash
 curl -fsS http://localhost:8080/actuator/health
 ```
+
+## Optional master HA
+
+The demo defaults to **single-master** mode (no leader election):
+
+docker compose -f demo/docker-compose.app.yml --profile single up -d --build
+
+To try etcd-based leader election:
+
+1) Start infra with the HA profile (brings up `scheduler-etcd`):
+
+```bash
+docker compose --profile ha -f demo/docker-compose.infra.yml up -d
+```
+
+2) In `demo/docker-compose.app.yml`, set these env vars on `scheduler-master`:
+
+```yaml
+     
+      # HA enabled => EtcdShardLeaderElector (per-shard leases stored in etcd)
+      SCHEDULER_MASTER_SHARDING_ENABLED: "true"
+      SCHEDULER_MASTER_SHARDING_SHARDS: "2"
+      
+      # Must be unique per replica
+      SCHEDULER_MASTER_SHARDING_NODEID: "${HOSTNAME:-scheduler-master-ha}"
+     
+      # Etcd coordination
+      SCHEDULER_MASTER_SHARDING_ELECTIONBASEPATH: "/scheduler/master/shards"
+     
+      # Duration string for java.time.Duration (Spring Boot binder)
+      SCHEDULER_MASTER_SHARDING_LEASETTL: "10s"
+      SCHEDULER_MASTER_SHARDING_ETCDENDPOINTS: "http://etcd:2379"
+```
+
+3) Scale masters:
+
+```bash
+docker compose -f demo/docker-compose.app.yml --profile ha up -d --build --scale scheduler-master-ha=2
+```
+
+Only the elected leader will run **MASTER-only** loops (command materialization, trigger engine, state consumer, reconciler).
 
 ### Step 1 — Create workflow definitions
 
@@ -410,3 +463,45 @@ docker compose -f demo/docker-compose.app.yml down -v
 docker compose -f demo/docker-compose.infra.yml down -v
 docker volume prune -f
 ```
+
+
+## Shard leadership (Model A)
+
+This repo supports **production-ready shard leadership** for horizontally scaling the master-owned orchestration plane.
+
+### Demo (single shard)
+Default demo runs with **SHARDS=1**, meaning:
+- `shard_id` is always `0`
+- shard leadership reduces to “one active writer” semantics (same as single-leader, but shard-aware code paths are exercised)
+
+You can enable sharding in `docker` profile with:
+
+```properties
+scheduler.master.sharding.enabled=true
+scheduler.master.sharding.shards=1
+scheduler.master.sharding.nodeId=demo-master-1
+# For demo/dev you may leave etcdEndpoints empty (standalone shard leader).
+```
+
+### Production (N shards)
+For production:
+- Set `scheduler.master.sharding.enabled=true`
+- Set `scheduler.master.sharding.shards=N`
+- Configure **etcd endpoints** for per-shard elections:
+  - election keyspace: `/scheduler/master/shards/<shardId>/leader` (base path configurable)
+
+```properties
+scheduler.master.sharding.enabled=true
+scheduler.master.sharding.shards=8
+scheduler.master.sharding.nodeId=master-a
+scheduler.master.sharding.etcdEndpoints[0]=http://etcd:2379
+scheduler.master.sharding.electionBasePath=/scheduler/master/shards
+scheduler.master.sharding.leaseTtl=10s
+```
+
+**Kafka partition guidance:** set topic partitions to match shard count (`partitions = N`) for best behavior:
+- `scheduler.tasks.ready.v1`
+- `scheduler.task.state.v1`
+- `scheduler.commands.v1` (currently keyed by `workflow_code` because instance ids are allocated in the master; for SHARDS>1 the master assigns workflow_instance_id values that land in the same shard.)
+
+Correctness is maintained even if partitions don’t perfectly match shards: shard leadership is enforced as a **hard fence** before any master-owned side effect, and consumers avoid committing offsets for records they cannot apply due to shard leadership mismatch.

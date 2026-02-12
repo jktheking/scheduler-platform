@@ -76,6 +76,12 @@ public final class KafkaCommandWriterLoop implements SmartLifecycle {
   }
 
   @Override
+  public boolean isAutoStartup() {
+    // Started explicitly via wiring (and HA leader-gating when enabled).
+    return false;
+  }
+
+  @Override
   public int getPhase() {
     return 0;
   }

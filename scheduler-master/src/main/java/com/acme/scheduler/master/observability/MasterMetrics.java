@@ -14,6 +14,7 @@ public final class MasterMetrics {
   public final SchedulerMeter.Counter commandProcessed;      // db-poll path
   public final SchedulerMeter.Counter commandKafkaConsumed;  // kafka consumer path
   public final SchedulerMeter.Counter commandKafkaError;
+  public final SchedulerMeter.Counter taskStateKafkaConsumed;
   public final SchedulerMeter.Counter workflowScheduled;
 
   public final SchedulerMeter.Counter triggerClaimed;
@@ -28,12 +29,20 @@ public final class MasterMetrics {
   public final SchedulerMeter.Counter dagProgressUnblocked;
   public final SchedulerMeter.Counter retryScheduled;
   public final SchedulerMeter.Counter dlqCreated;
+  public final SchedulerMeter.Counter dlqReplay;
+
+  public final SchedulerMeter.Counter alertPublished;
+  public final SchedulerMeter.Counter alertPublishError;
+  public final SchedulerMeter.Counter taskTimeoutAlerted;
+  public final SchedulerMeter.Counter taskTimeoutAlertError;
 
   public MasterMetrics(SchedulerMeter meter) {
     this.commandClaimed = meter.counter("scheduler.master.command.claimed", "Commands claimed from DB queue");
     this.commandProcessed = meter.counter("scheduler.master.command.processed", "Commands processed from DB queue");
     this.commandKafkaConsumed = meter.counter("scheduler.master.command.kafka.consumed", "Commands consumed from Kafka");
     this.commandKafkaError = meter.counter("scheduler.master.command.kafka.error", "Kafka consume errors");
+
+    this.taskStateKafkaConsumed = meter.counter("scheduler.master.task.state.kafka.consumed", "Task state events consumed from Kafka");
 
     this.workflowScheduled = meter.counter("scheduler.master.workflow.scheduled", "Workflows scheduled by master");
 
@@ -49,5 +58,12 @@ public final class MasterMetrics {
     this.dagProgressUnblocked = meter.counter("scheduler.master.dag.progress.unblocked.count", "Tasks unblocked by DAG progression");
     this.retryScheduled = meter.counter("scheduler.master.retry.scheduled.count", "Retries scheduled");
     this.dlqCreated = meter.counter("scheduler.master.dlq.created.count", "DLQ tasks created");
+    this.dlqReplay = meter.counter("scheduler.master.dlq.replay.count", "DLQ replay commands applied");
+
+    this.alertPublished = meter.counter("scheduler.master.alert.published", "Alert events published");
+    this.alertPublishError = meter.counter("scheduler.master.alert.publish.error", "Alert publish errors");
+
+    this.taskTimeoutAlerted = meter.counter("scheduler.master.task.timeout.alerted.count", "Task timeout alerts emitted");
+    this.taskTimeoutAlertError = meter.counter("scheduler.master.task.timeout.alert.error", "Task timeout alert errors");
   }
 }

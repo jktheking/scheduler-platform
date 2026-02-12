@@ -1,6 +1,7 @@
 package com.acme.scheduler.master.trigger;
 
 import com.acme.scheduler.master.adapter.jdbc.JdbcTriggerRepository;
+import com.acme.scheduler.master.ha.ShardLeaderElector;
 import com.acme.scheduler.master.observability.MasterMetrics;
 import com.acme.scheduler.master.runtime.DagRuntime;
 import org.slf4j.Logger;
@@ -20,6 +21,8 @@ public final class QuartzTriggerEngine implements TriggerEngine {
   private final JdbcTriggerRepository triggers;
   private final DagRuntime dagRuntime;
   private final MasterMetrics metrics;
+  private final ShardLeaderElector shardElector;
+  private final boolean shardingEnabled;
   private final long pollMs;
   private final int batch;
   private final String claimedBy;
@@ -34,11 +37,15 @@ public final class QuartzTriggerEngine implements TriggerEngine {
   public QuartzTriggerEngine(JdbcTriggerRepository triggers,
                             DagRuntime dagRuntime,
                             MasterMetrics metrics,
+                            ShardLeaderElector shardElector,
+                            boolean shardingEnabled,
                             long pollMs,
                             int batch) {
     this.triggers = Objects.requireNonNull(triggers);
     this.dagRuntime = Objects.requireNonNull(dagRuntime);
     this.metrics = Objects.requireNonNull(metrics);
+    this.shardElector = Objects.requireNonNull(shardElector);
+    this.shardingEnabled = shardingEnabled;
     this.pollMs = pollMs;
     this.batch = batch;
     this.claimedBy = "master-" + UUID.randomUUID();
@@ -58,13 +65,22 @@ public final class QuartzTriggerEngine implements TriggerEngine {
 
   private void tick() {
     try {
-      List<JdbcTriggerRepository.TriggerRow> claimed = triggers.claimDue(batch, claimedBy);
+      if (shardingEnabled && shardElector.leaderShards().isEmpty()) {
+        return;
+      }
+      List<JdbcTriggerRepository.TriggerRow> claimed = shardingEnabled
+          ? triggers.claimDue(shardElector.leaderShards(), batch, claimedBy)
+          : triggers.claimDue(batch, claimedBy);
       if (!claimed.isEmpty()) metrics.triggerClaimed.add(claimed.size());
       for (JdbcTriggerRepository.TriggerRow tr : claimed) {
         try {
           log.info("checkpoint=master.trigger_due_claimed triggerId={} workflowInstanceId={} dueTime={} claimedBy={}",
               tr.triggerId(), tr.workflowInstanceId(), tr.dueTime(), claimedBy);
-          dagRuntime.onTriggerDue(tr.workflowInstanceId(), tr.triggerId(), tr.dueTime(), "{}");
+          if (JdbcTriggerRepository.TriggerTypes.WORKFLOW_SLA.equals(tr.triggerType())) {
+            dagRuntime.onWorkflowSlaDue(tr.workflowInstanceId(), tr.triggerId(), tr.dueTime());
+          } else {
+            dagRuntime.onTriggerDue(tr.workflowInstanceId(), tr.triggerId(), tr.dueTime(), "{}");
+          }
           log.info("checkpoint=master.trigger_due_processed triggerId={} workflowInstanceId={} dueTime={}",
               tr.triggerId(), tr.workflowInstanceId(), tr.dueTime());
           triggers.markDone(tr.triggerId());

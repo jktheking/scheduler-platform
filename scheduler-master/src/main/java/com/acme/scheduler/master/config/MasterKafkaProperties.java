@@ -27,7 +27,8 @@ public class MasterKafkaProperties {
   public enum CommandDriver { KAFKA, DBPOLL }
 
   public static class Kafka {
-    private String bootstrapServers = "localhost:9092";
+	  //localhost:9092
+    private String bootstrapServers = "kafka:29092";
     private String commandsTopic = "scheduler.commands.v1";
     private String readyTopic = "scheduler.tasks.ready.v1";
     private String taskStateTopic = "scheduler.task.state.v1";

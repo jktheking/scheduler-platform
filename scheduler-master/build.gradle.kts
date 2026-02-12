@@ -22,9 +22,17 @@ dependencies {
  implementation(libs.spring.boot.starter.jdbc)
  // Jackson comes transitively from spring-boot-starter-web
 
+ // Optional (disabled by default): ETCD leader election for MASTER role HA.
+ // Keeping it as a normal dependency ensures compilation in offline environments.
+ implementation("io.etcd:jetcd-core:0.7.7")
+
  // OTel API comes transitively from :scheduler-meter
 
 
  runtimeOnly(libs.postgresql)
+
+  testImplementation(platform(libs.junit.bom))
+  testImplementation(libs.junit.jupiter)
+  testRuntimeOnly(libs.junit.platform.launcher)
 
 }

@@ -3,6 +3,10 @@ package com.acme.scheduler.master.runtime;
 import com.acme.scheduler.master.adapter.jdbc.JdbcDagTaskInstanceRepository;
 import com.acme.scheduler.master.adapter.jdbc.JdbcTriggerRepository;
 import com.acme.scheduler.master.observability.MasterMetrics;
+import com.acme.scheduler.common.alert.AlertEvent;
+import com.acme.scheduler.common.alert.AlertSeverity;
+import com.acme.scheduler.common.alert.AlertType;
+import com.acme.scheduler.domain.alert.AlertPublisher;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -14,14 +18,20 @@ public final class RetryPlanner {
 
   private final JdbcDagTaskInstanceRepository tasks;
   private final JdbcTriggerRepository triggers;
+  private final JdbcTemplateWorkflowInstanceStatus wi;
+  private final AlertPublisher alertPublisher;
   private final MasterMetrics metrics;
   private final Random rnd = new Random();
 
   public RetryPlanner(JdbcDagTaskInstanceRepository tasks,
                       JdbcTriggerRepository triggers,
+                      JdbcTemplateWorkflowInstanceStatus wi,
+                      AlertPublisher alertPublisher,
                       MasterMetrics metrics) {
     this.tasks = Objects.requireNonNull(tasks);
     this.triggers = Objects.requireNonNull(triggers);
+    this.wi = Objects.requireNonNull(wi);
+    this.alertPublisher = Objects.requireNonNull(alertPublisher);
     this.metrics = Objects.requireNonNull(metrics);
   }
 
@@ -50,6 +60,27 @@ public final class RetryPlanner {
     if (nextAttempt >= meta.maxAttempts()) {
       tasks.moveToDlq(workflowInstanceId, taskInstanceId, reason);
       metrics.dlqCreated.add(1);
+
+      // Alert: DLQ created (master-owned truth: retry budget exhausted).
+      var k = wi.loadInstanceKey(workflowInstanceId);
+      String eventId = "DLQ:" + workflowInstanceId + ":" + taskInstanceId + ":" + meta.attempt();
+      alertPublisher.publish(new AlertEvent(
+          eventId,
+          AlertType.DLQ_CREATED,
+          AlertSeverity.ERROR,
+          k.tenantId(),
+          workflowInstanceId,
+          k.workflowCode(),
+          k.workflowVersion(),
+          taskInstanceId,
+          meta.taskCode(),
+          meta.attempt(),
+          null,
+          Instant.now(),
+          "Task moved to DLQ",
+          reason,
+          null
+      ));
       return;
     }
 

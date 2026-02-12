@@ -72,7 +72,7 @@ public final class KafkaCommandBus implements CommandBus {
     }
 
     try {
-      String key = command.idempotencyKey();
+      String key = Long.toString(command.workflowCode());
       byte[] value = mapper.writeValueAsBytes(command);
 
       // We keep this async for throughput; callback updates breaker state.

@@ -14,8 +14,6 @@
 -- ---------------------------------------------------------------------
 -- 1) Command WAL (Kafka WAL-first ingestion)
 -- ---------------------------------------------------------------------
--- scheduler-platform schema v1 (minimal for API -> master -> ready)
--- NOTE: keep tables small and evolve with backward-compatible migrations.
 
 CREATE TABLE IF NOT EXISTS t_command (
   command_id        TEXT PRIMARY KEY,
@@ -70,7 +68,9 @@ CREATE TABLE IF NOT EXISTS t_workflow_plan (
 CREATE TABLE IF NOT EXISTS t_trigger (
   trigger_id           BIGSERIAL PRIMARY KEY,
   workflow_instance_id BIGINT NOT NULL REFERENCES t_workflow_instance(workflow_instance_id) ON DELETE CASCADE,
+  shard_id            INTEGER NOT NULL DEFAULT 0,
   due_time             TIMESTAMPTZ NOT NULL,
+  trigger_type         TEXT NOT NULL DEFAULT 'DAG_WAKE',
   status               TEXT NOT NULL, -- DUE | ENQUEUED | PROCESSING | DONE | FAILED
   claimed_by           TEXT NULL,
   claimed_at           TIMESTAMPTZ NULL,
@@ -81,11 +81,14 @@ CREATE TABLE IF NOT EXISTS t_trigger (
 CREATE INDEX IF NOT EXISTS ix_trigger_status_due
   ON t_trigger(status, due_time);
 
+-- One workflow SLA trigger per workflow instance (idempotent scheduling).
+CREATE UNIQUE INDEX IF NOT EXISTS ux_trigger_workflow_sla
+  ON t_trigger(workflow_instance_id)
+  WHERE trigger_type = 'WORKFLOW_SLA';
+
 -- ---------------------------------------------------------------------
 -- 2) DAG definition storage + runtime (master-owned DAG orchestration)
 -- ---------------------------------------------------------------------
--- DAG runtime + definition storage (v2)
--- NOTE: V1 tables must remain untouched.
 
 CREATE TABLE IF NOT EXISTS t_workflow_definition (
   workflow_code BIGINT NOT NULL,
@@ -126,6 +129,7 @@ CREATE INDEX IF NOT EXISTS ix_wde_from
 CREATE TABLE IF NOT EXISTS t_task_instance (
   task_instance_id BIGSERIAL PRIMARY KEY,
   workflow_instance_id BIGINT NOT NULL REFERENCES t_workflow_instance(workflow_instance_id) ON DELETE CASCADE,
+  shard_id INTEGER NOT NULL DEFAULT 0,
   task_code BIGINT NOT NULL,
   task_version INTEGER NOT NULL,
   task_name TEXT NOT NULL,
@@ -139,6 +143,7 @@ CREATE TABLE IF NOT EXISTS t_task_instance (
   started_at TIMESTAMPTZ NULL,
   finished_at TIMESTAMPTZ NULL,
   last_error TEXT NULL,
+  timeout_alerted_at TIMESTAMPTZ NULL,
   payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -150,6 +155,9 @@ CREATE INDEX IF NOT EXISTS ix_ti_workflow
 
 CREATE INDEX IF NOT EXISTS ix_ti_status_next
   ON t_task_instance(status, next_run_time);
+
+CREATE INDEX IF NOT EXISTS ix_ti_timeout_alerted
+  ON t_task_instance(status, timeout_alerted_at);
 
 CREATE TABLE IF NOT EXISTS t_dlq_task (
   dlq_id BIGSERIAL PRIMARY KEY,
@@ -181,4 +189,13 @@ CREATE SEQUENCE IF NOT EXISTS seq_task_code
   INCREMENT BY 1
   CACHE 50;
 
--- End of consolidated migration.
+
+CREATE INDEX IF NOT EXISTS idx_t_trigger_shard_status_due
+  ON t_trigger (shard_id, status, due_time, trigger_id);
+
+CREATE INDEX IF NOT EXISTS idx_t_task_instance_shard_status_updated
+  ON t_task_instance (shard_id, status, updated_at, task_instance_id);
+
+CREATE INDEX IF NOT EXISTS idx_t_task_instance_shard_status_next_run
+  ON t_task_instance (shard_id, status, next_run_time, task_instance_id);
+

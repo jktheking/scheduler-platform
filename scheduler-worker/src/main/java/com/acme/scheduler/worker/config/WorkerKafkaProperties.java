@@ -1,4 +1,4 @@
-package com.acme.scheduler.worker.kafka;
+package com.acme.scheduler.worker.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -14,7 +14,7 @@ public class WorkerKafkaProperties {
   public void setWorkerId(String workerId) { this.workerId = workerId; }
 
   public static class Kafka {
-    private String bootstrapServers = "localhost:9092";
+    private String bootstrapServers = "kafka:29092";
     private String readyTopic = "scheduler.tasks.ready.v1";
     private String taskStateTopic = "scheduler.task.state.v1";
     private String groupId = "scheduler-worker";

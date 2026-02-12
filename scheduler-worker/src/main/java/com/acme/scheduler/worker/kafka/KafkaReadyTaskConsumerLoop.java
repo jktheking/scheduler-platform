@@ -2,6 +2,7 @@ package com.acme.scheduler.worker.kafka;
 
 import com.acme.scheduler.common.runtime.TaskDispatchEnvelope;
 import com.acme.scheduler.meter.SchedulerMeter;
+import com.acme.scheduler.worker.config.WorkerKafkaProperties;
 import com.acme.scheduler.worker.runtime.WorkerTaskOrchestrator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

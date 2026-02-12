@@ -3,6 +3,7 @@ package com.acme.scheduler.domain.execution;
 /** command types (control-plane triggers). */
 public enum CommandType {
  START_PROCESS,
+ REPLAY_DLQ,
  SCHEDULER,
  COMPLEMENT_DATA,
  RECOVER_TOLERANCE,

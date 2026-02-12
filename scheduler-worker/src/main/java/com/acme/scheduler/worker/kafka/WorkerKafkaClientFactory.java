@@ -9,6 +9,9 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
+
+import com.acme.scheduler.worker.config.WorkerKafkaProperties;
+
 import org.apache.kafka.common.serialization.ByteArraySerializer;
 
 /**

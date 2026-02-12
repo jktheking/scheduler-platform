@@ -17,6 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.acme.scheduler.master.adapter.jdbc.JdbcTriggerRepository;
+import com.acme.scheduler.master.ha.ShardLeaderElector;
 import com.acme.scheduler.master.runtime.DagRuntime;
 import com.acme.scheduler.master.observability.MasterMetrics;
 
@@ -38,6 +39,8 @@ public final class TimeWheelTriggerEngine implements TriggerEngine {
 	private final JdbcTriggerRepository repo;
 	private final DagRuntime dagRuntime;
 	private final MasterMetrics metrics;
+	private final ShardLeaderElector shardElector;
+	private final boolean shardingEnabled;
 
 	private final int shards;
 	private final long tickMs;
@@ -69,11 +72,21 @@ public final class TimeWheelTriggerEngine implements TriggerEngine {
 	private final List<WheelShard> wheel;
 	private final AtomicBoolean started = new AtomicBoolean(false);
 
-	public TimeWheelTriggerEngine(JdbcTriggerRepository repo, DagRuntime dagRuntime, MasterMetrics metrics, int shards,
-			long tickMs, int slots, long lookaheadMs, int drainBatch) {
+	public TimeWheelTriggerEngine(JdbcTriggerRepository repo,
+						  DagRuntime dagRuntime,
+						  MasterMetrics metrics,
+						  ShardLeaderElector shardElector,
+						  boolean shardingEnabled,
+						  int shards,
+						  long tickMs,
+						  int slots,
+						  long lookaheadMs,
+						  int drainBatch) {
 		this.repo = Objects.requireNonNull(repo);
 		this.dagRuntime = Objects.requireNonNull(dagRuntime);
 		this.metrics = Objects.requireNonNull(metrics);
+		this.shardElector = Objects.requireNonNull(shardElector);
+		this.shardingEnabled = shardingEnabled;
 		this.shards = shards;
 		this.tickMs = tickMs;
 		this.slots = slots;
@@ -108,9 +121,14 @@ public final class TimeWheelTriggerEngine implements TriggerEngine {
 
 	private void loadUpcoming() {
 		try {
+			if (shardingEnabled && shardElector.leaderShards().isEmpty()) {
+				return;
+			}
 			Instant upper = Instant.now().plusMillis(lookaheadMs);
 			// Conservative cap: load up to 10x drainBatch per cycle
-			List<JdbcTriggerRepository.TriggerRow> upcoming = repo.loadUpcoming(upper, Math.max(1000, drainBatch * 10));
+			List<JdbcTriggerRepository.TriggerRow> upcoming = shardingEnabled
+					? repo.loadUpcoming(shardElector.leaderShards(), upper, Math.max(1000, drainBatch * 10))
+					: repo.loadUpcoming(upper, Math.max(1000, drainBatch * 10));
 			for (JdbcTriggerRepository.TriggerRow tr : upcoming) {
 				// Flip state to ENQUEUED to avoid repeated wheel inserts; benign if concurrent
 				// masters race.
@@ -153,22 +171,37 @@ public final class TimeWheelTriggerEngine implements TriggerEngine {
 
 	private void processBatch(List<JdbcTriggerRepository.TriggerRow> batch) {
 		try {
+			if (shardingEnabled && shardElector.leaderShards().isEmpty()) {
+				return;
+			}
 			// Claim in DB to handle multi-master correctness; claimDue uses SKIP LOCKED and
 			// due_time <= now()
 			// We re-claim per trigger by issuing claimDue in chunks to leverage DB locking
 			// and avoid double publish.
 			// For v1, we just publish events for already-claimed triggers via claimDue
 			// batch.
-			List<JdbcTriggerRepository.TriggerRow> claimed = repo.claimDue(batch.size(), claimedBy);
+			List<JdbcTriggerRepository.TriggerRow> claimed = shardingEnabled
+					? repo.claimDue(shardElector.leaderShards(), batch.size(), claimedBy)
+					: repo.claimDue(batch.size(), claimedBy);
 			for (JdbcTriggerRepository.TriggerRow tr : claimed) {
 				try {
 					log.info(
 							"checkpoint=master.trigger_due_claimed triggerId={} workflowInstanceId={} dueTime={} claimedBy={}",
 							tr.triggerId(), tr.workflowInstanceId(), tr.dueTime(), claimedBy);
-					dagRuntime.onTriggerDue(tr.workflowInstanceId(), tr.triggerId(), tr.dueTime(), "{}");
+					
+					
+					if (JdbcTriggerRepository.TriggerTypes.WORKFLOW_SLA.equals(tr.triggerType())) {
+						dagRuntime.onWorkflowSlaDue(tr.workflowInstanceId(), tr.triggerId(), tr.dueTime());
+					} else {
+						dagRuntime.onTriggerDue(tr.workflowInstanceId(), tr.triggerId(), tr.dueTime(), "{}");
+					}
+					
+					
 					log.info("checkpoint=master.trigger_due_processed triggerId={} workflowInstanceId={} dueTime={}",
 							tr.triggerId(), tr.workflowInstanceId(), tr.dueTime());
 					repo.markDone(tr.triggerId());
+					
+					
 					log.info("checkpoint=master.trigger_mark_done triggerId={} workflowInstanceId={}", tr.triggerId(),
 							tr.workflowInstanceId());
 					metrics.triggerProcessed.add(1);

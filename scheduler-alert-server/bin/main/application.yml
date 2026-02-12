@@ -1,0 +1,20 @@
+server:
+  port: 8095
+
+scheduler:
+  alert-server:
+    kafka:
+      bootstrapServers: ${SCHEDULER_ALERT_SERVER_KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
+      topic: ${SCHEDULER_ALERT_SERVER_KAFKA_TOPIC:scheduler.alerts.v1}
+      groupId: ${SCHEDULER_ALERT_SERVER_KAFKA_GROUPID:scheduler-alert-server}
+      clientId: ${SCHEDULER_ALERT_SERVER_KAFKA_CLIENTID:scheduler-alert-server}
+    webhook:
+      # urls:
+      #   - http://example.com/alerts
+      urls: ${SCHEDULER_ALERTSERVER_WEBHOOK_URLS:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus

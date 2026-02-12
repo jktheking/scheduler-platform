@@ -19,8 +19,11 @@ services:
       SPRING_PROFILES_ACTIVE: docker
 
       SCHEDULER_INGESTION_MODE: KAFKA
-      SCHEDULER_INGESTION_KAFKA_BOOTSTRAPSERVERS: kafka:29092
-      SCHEDULER_INGESTION_KAFKA_COMMANDSTOPIC: scheduler.commands.v1
+      # Bound via @ConfigurationProperties(prefix = "scheduler.ingestion")
+      #   scheduler.ingestion.kafka.bootstrap-servers
+      #   scheduler.ingestion.kafka.commands-topic
+      SCHEDULER_INGESTION_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SCHEDULER_INGESTION_KAFKA_COMMANDS_TOPIC: scheduler.commands.v1
 
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/scheduler
       SPRING_DATASOURCE_USERNAME: scheduler
@@ -51,7 +54,12 @@ services:
     restart: unless-stopped
     networks: [scheduler-net]
 
+  # ------------------------------------------------------------
+  # MASTER (SINGLE MODE ONLY)
+  # Start with: docker compose -f demo/docker-compose.app.yml --profile single up -d --build
+  # ------------------------------------------------------------
   scheduler-master:
+    profiles: ["single"]
     build:
       context: ..
       dockerfile: Dockerfile
@@ -60,16 +68,29 @@ services:
         JAVA_VERSION: "25"
     image: scheduler-master:demo
     container_name: scheduler-master
+
     environment:
       SPRING_PROFILES_ACTIVE: docker
 
       # master is Kafka-driven
       SCHEDULER_MASTER_COMMAND_DRIVER: KAFKA
-      SCHEDULER_MASTER_KAFKA_BOOTSTRAPSERVERS: kafka:29092
-      SCHEDULER_MASTER_KAFKA_COMMANDSTOPIC: scheduler.commands.v1
-      SCHEDULER_MASTER_KAFKA_READYTOPIC: scheduler.tasks.ready.v1
-      SCHEDULER_MASTER_KAFKA_STATETOPIC: scheduler.task.state.v1
+      # Bound via @ConfigurationProperties(prefix = "scheduler.master")
+      #   scheduler.master.kafka.bootstrap-servers
+      #   scheduler.master.kafka.commands-topic
+      #   scheduler.master.kafka.ready-topic
+      #   scheduler.master.kafka.task-state-topic
+      SCHEDULER_MASTER_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SCHEDULER_MASTER_KAFKA_COMMANDS_TOPIC: scheduler.commands.v1
+      SCHEDULER_MASTER_KAFKA_READY_TOPIC: scheduler.tasks.ready.v1
+      SCHEDULER_MASTER_KAFKA_TASK_STATE_TOPIC: scheduler.task.state.v1
 
+      # ---- Master sharding / leader election ----
+      # HA disabled => FixedShardLeaderElector (this node owns all shards)
+      SCHEDULER_MASTER_SHARDING_ENABLED: "false"
+      SCHEDULER_MASTER_SHARDING_SHARDS: "1"
+      SCHEDULER_MASTER_SHARDING_NODEID: "${HOSTNAME:-scheduler-master}"
+
+  
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/scheduler
       SPRING_DATASOURCE_USERNAME: scheduler
       SPRING_DATASOURCE_PASSWORD: scheduler
@@ -86,8 +107,82 @@ services:
         -javaagent:/otel/opentelemetry-javaagent.jar
         -Dotel.javaagent.debug=false
         -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5006
+
     ports:
-    - "5006:5006"				
+      - "5006:5006"
+
+    volumes:
+      - ./otel/opentelemetry-javaagent.jar:/otel/opentelemetry-javaagent.jar:ro
+
+    restart: unless-stopped
+    networks: [scheduler-net]
+
+  # ------------------------------------------------------------
+  # MASTER (HA MODE ONLY, SCALE-SAFE)
+  # Start with:
+  #   docker compose -f demo/docker-compose.infra.yml --profile ha up -d
+  #   docker compose -f demo/docker-compose.app.yml --profile ha up -d --build --scale scheduler-master-ha=2
+  # ------------------------------------------------------------
+  scheduler-master-ha:
+    profiles: ["ha"]
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        APP_MODULE: scheduler-master
+        JAVA_VERSION: "25"
+    image: scheduler-master:demo
+    # IMPORTANT: no container_name (required for scaling)
+
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+
+      # master is Kafka-driven
+      SCHEDULER_MASTER_COMMAND_DRIVER: KAFKA
+      # Bound via @ConfigurationProperties(prefix = "scheduler.master")
+      #   scheduler.master.kafka.bootstrap-servers
+      #   scheduler.master.kafka.commands-topic
+      #   scheduler.master.kafka.ready-topic
+      #   scheduler.master.kafka.task-state-topic
+      SCHEDULER_MASTER_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SCHEDULER_MASTER_KAFKA_COMMANDS_TOPIC: scheduler.commands.v1
+      SCHEDULER_MASTER_KAFKA_READY_TOPIC: scheduler.tasks.ready.v1
+      SCHEDULER_MASTER_KAFKA_TASK_STATE_TOPIC: scheduler.task.state.v1
+
+      # ---- Master sharding / leader election ----
+      # HA enabled => EtcdShardLeaderElector (per-shard leases stored in etcd)
+      SCHEDULER_MASTER_SHARDING_ENABLED: "true"
+      SCHEDULER_MASTER_SHARDING_SHARDS: "2"
+      # Must be unique per replica
+      SCHEDULER_MASTER_SHARDING_NODEID: "${HOSTNAME:-scheduler-master-ha}"
+      # Etcd coordination
+      SCHEDULER_MASTER_SHARDING_ELECTIONBASEPATH: "/scheduler/master/shards"
+      # Duration string for java.time.Duration (Spring Boot binder)
+      SCHEDULER_MASTER_SHARDING_LEASETTL: "10s"
+      SCHEDULER_MASTER_SHARDING_ETCDENDPOINTS: "http://etcd:2379"
+
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/scheduler
+      SPRING_DATASOURCE_USERNAME: scheduler
+      SPRING_DATASOURCE_PASSWORD: scheduler
+
+      # ---- OTel Java Agent ----
+      OTEL_SERVICE_NAME: scheduler-master-ha
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: none
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=demo
+
+      JAVA_TOOL_OPTIONS: >
+        -javaagent:/otel/opentelemetry-javaagent.jar
+        -Dotel.javaagent.debug=false
+        -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5006
+
+    # IMPORTANT: no fixed host port mapping when scaling
+    expose:
+      - "5006"
+
     volumes:
       - ./otel/opentelemetry-javaagent.jar:/otel/opentelemetry-javaagent.jar:ro
 
@@ -103,13 +198,19 @@ services:
         JAVA_VERSION: "25"
     image: scheduler-worker:demo
     container_name: scheduler-worker
+
     environment:
       SPRING_PROFILES_ACTIVE: docker
 
-      SCHEDULER_WORKER_ID: worker-1
-      SCHEDULER_WORKER_KAFKA_BOOTSTRAPSERVERS: kafka:29092
-      SCHEDULER_WORKER_KAFKA_READYTOPIC: scheduler.tasks.ready.v1
-      SCHEDULER_WORKER_KAFKA_STATETOPIC: scheduler.task.state.v1
+      # Bound via @ConfigurationProperties(prefix = "scheduler.worker")
+      #   scheduler.worker.worker-id
+      #   scheduler.worker.kafka.bootstrap-servers
+      #   scheduler.worker.kafka.ready-topic
+      #   scheduler.worker.kafka.task-state-topic
+      SCHEDULER_WORKER_WORKER_ID: worker-1
+      SCHEDULER_WORKER_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SCHEDULER_WORKER_KAFKA_READY_TOPIC: scheduler.tasks.ready.v1
+      SCHEDULER_WORKER_KAFKA_TASK_STATE_TOPIC: scheduler.task.state.v1
 
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/scheduler
       SPRING_DATASOURCE_USERNAME: scheduler
@@ -127,8 +228,55 @@ services:
         -javaagent:/otel/opentelemetry-javaagent.jar
         -Dotel.javaagent.debug=false
         -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5007
+
     ports:
-    - "5007:5007"
+      - "5007:5007"
+
+    volumes:
+      - ./otel/opentelemetry-javaagent.jar:/otel/opentelemetry-javaagent.jar:ro
+
+    restart: unless-stopped
+    networks: [scheduler-net]
+
+  scheduler-alert-server:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        APP_MODULE: scheduler-alert-server
+        JAVA_VERSION: "25"
+    image: scheduler-alert-server:demo
+    container_name: scheduler-alert-server
+
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVER_PORT: "8090"
+
+      # Bound via @ConfigurationProperties(prefix = "scheduler.alert-server")
+      #   scheduler.alert-server.kafka.bootstrap-servers
+      #   scheduler.alert-server.kafka.topic
+      #   scheduler.alert-server.kafka.group-id
+      SCHEDULER_ALERT_SERVER_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SCHEDULER_ALERT_SERVER_KAFKA_TOPIC: scheduler.alerts.v1
+      SCHEDULER_ALERT_SERVER_KAFKA_GROUP_ID: scheduler-alert-server
+
+      # ---- OTel Java Agent ----
+      OTEL_SERVICE_NAME: scheduler-alert-server
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: none
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=demo
+
+      JAVA_TOOL_OPTIONS: >
+        -javaagent:/otel/opentelemetry-javaagent.jar
+        -Dotel.javaagent.debug=false
+        -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5008
+
+    ports:
+      - "8090:8090"
+      - "5008:5008"
+
     volumes:
       - ./otel/opentelemetry-javaagent.jar:/otel/opentelemetry-javaagent.jar:ro
 

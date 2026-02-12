@@ -1,6 +1,7 @@
 package com.acme.scheduler.master.runtime;
 
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.PreparedStatementSetter;
 
 import java.util.Collection;
 import java.util.Objects;
@@ -16,8 +17,17 @@ public final class JdbcTemplateWorkflowInstanceStatus {
 
   public int countNotSuccessfulParents(long workflowInstanceId, Collection<Long> parentTaskCodes) {
     if (parentTaskCodes == null || parentTaskCodes.isEmpty()) return 0;
+
     Long[] arr = parentTaskCodes.toArray(Long[]::new);
-    Integer c = jdbc.queryForObject("""
+
+    PreparedStatementSetter pss = ps -> {
+      java.sql.Array pgArr = ps.getConnection().createArrayOf("bigint", arr);
+      ps.setLong(1, workflowInstanceId);
+      ps.setArray(2, pgArr);
+      ps.setLong(3, workflowInstanceId);
+    };
+
+    Integer c = jdbc.query("""
       WITH latest AS (
         SELECT task_code, MAX(attempt) AS a
         FROM t_task_instance
@@ -30,7 +40,8 @@ public final class JdbcTemplateWorkflowInstanceStatus {
       JOIN latest l ON l.task_code = ti.task_code AND l.a = ti.attempt
       WHERE ti.workflow_instance_id=?
         AND ti.status NOT IN ('SUCCESS','SKIPPED')
-    """, Integer.class, workflowInstanceId, arr, workflowInstanceId);
+    """, pss, rs -> rs.next() ? rs.getInt(1) : 0);
+
     return c == null ? 0 : c;
   }
 
@@ -55,6 +66,23 @@ public final class JdbcTemplateWorkflowInstanceStatus {
     jdbc.update("UPDATE t_workflow_instance SET status='RUNNING', updated_at=now() WHERE workflow_instance_id=? AND status IN ('TRIGGERED','CREATED')", workflowInstanceId);
   }
 
+  /**
+   * @return true iff the workflow transitioned into RUNNING in this call.
+   */
+  public boolean markWorkflowRunningIfStart(long workflowInstanceId) {
+    int updated = jdbc.update("UPDATE t_workflow_instance SET status='RUNNING', updated_at=now() WHERE workflow_instance_id=? AND status IN ('TRIGGERED','CREATED')", workflowInstanceId);
+    return updated == 1;
+  }
+
+  public String loadStatus(long workflowInstanceId) {
+    return jdbc.queryForObject("SELECT status FROM t_workflow_instance WHERE workflow_instance_id=?", String.class, workflowInstanceId);
+  }
+
+  public boolean isTerminal(long workflowInstanceId) {
+    String s = loadStatus(workflowInstanceId);
+    return s != null && (s.equals("SUCCESS") || s.equals("FAILURE"));
+  }
+
   public void markWorkflowSuccess(long workflowInstanceId) {
     jdbc.update("UPDATE t_workflow_instance SET status='SUCCESS', updated_at=now() WHERE workflow_instance_id=?", workflowInstanceId);
   }
@@ -65,6 +93,21 @@ public final class JdbcTemplateWorkflowInstanceStatus {
 
   public void markWorkflowFailed(long workflowInstanceId, String lastError) {
     jdbc.update("UPDATE t_workflow_instance SET status='FAILURE', last_error=?, updated_at=now() WHERE workflow_instance_id=?", lastError, workflowInstanceId);
+  }
+
+  /**
+   * Mark workflow as FAILURE only if it is not already in a terminal state.
+   *
+   * @return true iff the status transitioned to FAILURE.
+   */
+  public boolean markWorkflowFailedIfNotTerminal(long workflowInstanceId, String lastError) {
+    int updated = jdbc.update("""
+        UPDATE t_workflow_instance
+        SET status='FAILURE', last_error=?, updated_at=now()
+        WHERE workflow_instance_id=?
+          AND status NOT IN ('SUCCESS','FAILURE')
+        """, lastError, workflowInstanceId);
+    return updated == 1;
   }
 
   public record InstanceKey(String tenantId, long workflowCode, int workflowVersion) {}

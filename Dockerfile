@@ -4,6 +4,7 @@
 #   docker build -f Dockerfile --build-arg APP_MODULE=scheduler-api -t scheduler-api:demo .
 #   docker build -f Dockerfile --build-arg APP_MODULE=scheduler-master -t scheduler-master:demo .
 #   docker build -f Dockerfile --build-arg APP_MODULE=scheduler-worker -t scheduler-worker:demo .
+#   docker build -f Dockerfile --build-arg APP_MODULE=scheduler-alert-server -t scheduler-alert-server:demo .
 
 
 

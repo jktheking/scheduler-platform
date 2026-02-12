@@ -2,6 +2,7 @@ package com.acme.scheduler.worker.kafka;
 
 import com.acme.scheduler.common.runtime.TaskStateEvent;
 import com.acme.scheduler.meter.SchedulerMeter;
+import com.acme.scheduler.worker.config.WorkerKafkaProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
