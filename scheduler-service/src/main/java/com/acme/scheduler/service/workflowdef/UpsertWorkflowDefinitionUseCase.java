@@ -27,6 +27,7 @@ public final class UpsertWorkflowDefinitionUseCase {
    */
   public Response handle(String tenantId,
                          String name,
+                         Long slaSecondsOrNull,
                          JsonNode tasksJson,
                          JsonNode edgesJson,
                          Long workflowCodeOrNull) {
@@ -73,7 +74,8 @@ public final class UpsertWorkflowDefinitionUseCase {
         workflowCodeOrNull,
         name,
         tasks,
-        edges
+        edges,
+        slaSecondsOrNull
     );
     return new Response(r.workflowCode(), r.workflowVersion());
   }

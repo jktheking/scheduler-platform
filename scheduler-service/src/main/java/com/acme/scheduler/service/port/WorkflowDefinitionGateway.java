@@ -21,7 +21,8 @@ public interface WorkflowDefinitionGateway {
       Long workflowCodeOrNull,
       String name,
       List<TaskSpec> tasks,
-      List<EdgeSpec> edges
+      List<EdgeSpec> edges,
+      Long slaSecondsOrNull
   );
 
   List<WorkflowSummary> listLatest(String tenantId, int limit);
